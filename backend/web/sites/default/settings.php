@@ -90,7 +90,17 @@
  * ];
  * @endcode
  */
-$databases = [];
+if (getenv('DB_HOST')) {
+  $databases['default']['default'] = [
+    'database' => getenv('DB_NAME'),
+    'username' => getenv('DB_USER'),
+    'password' => getenv('DB_PASSWORD'),
+    'host' => getenv('DB_HOST'),
+    'port' => '3306',
+    'driver' => 'mysql',
+    'prefix' => '',
+  ];
+}
 
 /**
  * Customizing database settings.
@@ -259,6 +269,7 @@ $databases = [];
  * its location.
  */
 # $settings['config_sync_directory'] = '/directory/outside/webroot';
+$settings['config_sync_directory'] = '../config/sync';
 
 /**
  * Settings:
@@ -288,7 +299,7 @@ $databases = [];
  *   $settings['hash_salt'] = file_get_contents('/home/example/salt.txt');
  * @endcode
  */
-$settings['hash_salt'] = '';
+$settings['hash_salt'] = getenv('HASH_SALT');
 
 /**
  * Deployment identifier.
