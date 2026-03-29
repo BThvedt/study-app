@@ -1,0 +1,94 @@
+---
+description: Frontend uses shadcn/ui for all UI; use correct CLI, theming, icons, and component conventions
+globs: frontend/**/*.tsx,frontend/**/*.ts
+alwaysApply: false
+---
+
+# shadcn/ui (frontend)
+
+Use [shadcn/ui](https://ui.shadcn.com/) for **all** UI primitives in the Next.js app under `frontend/`. Never hand-roll raw `<input>`, `<button>`, `<select>`, `<dialog>`, etc. when a shadcn equivalent exists.
+
+Config: [components.json](mdc:frontend/components.json) · Style: `base-nova` · Icons: `lucide-react`
+
+---
+
+## CLI (run from `frontend/`)
+
+Initialize (only if `components.json` is missing):
+```bash
+npx shadcn@latest init
+```
+
+Add a missing component (replace `button` with any component name from the shadcn docs):
+```bash
+npx shadcn@latest add button
+```
+
+Common components: `button`, `input`, `card`, `dialog`, `dropdown-menu`, `form`, `label`, `select`, `sheet`, `toast`, `tabs`, `badge`, `avatar`, `separator`, `skeleton`.
+
+---
+
+## File locations
+
+| Type | Path |
+|------|------|
+| shadcn primitives (auto-generated, do not edit) | `@/components/ui/` |
+| Custom composite components | `@/components/` |
+| Shared utilities (`cn`) | `@/lib/utils` |
+
+---
+
+## `cn()` for class merging
+
+Always merge Tailwind classes with `cn()` from [@/lib/utils](mdc:frontend/src/lib/utils.ts):
+```tsx
+import { cn } from '@/lib/utils';
+<div className={cn('base-class', conditional && 'extra-class', className)} />
+```
+
+## Custom variants with `cva`
+
+Use `class-variance-authority` (already installed) for components with multiple variants:
+```tsx
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '@/lib/utils';
+
+const badge = cva('rounded-full px-2 py-0.5 text-xs font-medium', {
+  variants: {
+    variant: { default: 'bg-primary text-primary-foreground', muted: 'bg-muted text-muted-foreground' },
+  },
+  defaultVariants: { variant: 'default' },
+});
+```
+
+---
+
+## Tailwind v4 — CSS-based theming
+
+This project uses **Tailwind v4**. There is no `tailwind.config.ts`. All design tokens (colors, radius, fonts) are CSS variables defined in [@/app/globals.css](mdc:frontend/src/app/globals.css).
+
+- Use semantic tokens (`bg-background`, `text-foreground`, `border-border`, `text-muted-foreground`, etc.) instead of raw color values like `bg-gray-100`.
+- Do **not** add a `tailwind.config.ts` to customize the theme; extend tokens in `globals.css` under `@theme inline` instead.
+
+## Dark mode
+
+Dark mode uses the `.dark` class strategy (toggle `dark` on `<html>`). Color tokens automatically switch via CSS variables — no extra `dark:` overrides needed for standard semantic tokens.
+
+---
+
+## Icons
+
+Use `lucide-react` (already installed) for all icons:
+```tsx
+import { Search, ChevronDown } from 'lucide-react';
+<Search className="h-4 w-4" />
+```
+
+Do not install a second icon library.
+
+---
+
+## RSC & `'use client'`
+
+- `rsc: true` is set — shadcn components that use hooks or browser APIs are already marked `'use client'` inside `@/components/ui/`.
+- Pages and layouts are Server Components by default; add `'use client'` only when the component itself needs state, effects, or event handlers.
