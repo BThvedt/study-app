@@ -12,6 +12,14 @@ targetEntityType: taxonomy_term
 bundle: subject
 mode: default
 content:
+  description:
+    type: text_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 60
+      placeholder: ''
+    third_party_settings: {  }
   field_area:
     type: entity_reference_autocomplete
     weight: 1
@@ -35,5 +43,12 @@ content:
     weight: 30
     region: content
     settings: {  }
+    third_party_settings: {  }
+  status:
+    type: boolean_checkbox
+    weight: 100
+    region: content
+    settings:
+      display_label: true
     third_party_settings: {  }
 hidden: {  }

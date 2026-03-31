@@ -14,13 +14,19 @@ targetEntityType: node
 bundle: flashcard
 mode: default
 content:
-  title:
-    type: string_textfield
-    weight: 0
+  created:
+    type: datetime_timestamp
+    weight: 10
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+  field_back:
+    type: string_textarea
+    weight: 3
     region: content
     settings:
-      size: 60
-      placeholder: 'Short title for this card (e.g. the concept name)'
+      rows: 4
+      placeholder: Answer...
     third_party_settings: {  }
   field_deck:
     type: entity_reference_autocomplete
@@ -40,14 +46,6 @@ content:
       rows: 4
       placeholder: 'Question or prompt...'
     third_party_settings: {  }
-  field_back:
-    type: string_textarea
-    weight: 3
-    region: content
-    settings:
-      rows: 4
-      placeholder: 'Answer...'
-    third_party_settings: {  }
   path:
     type: path
     weight: 30
@@ -61,6 +59,14 @@ content:
     settings:
       display_label: true
     third_party_settings: {  }
+  title:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 60
+      placeholder: 'Short title for this card (e.g. the concept name)'
+    third_party_settings: {  }
   uid:
     type: entity_reference_autocomplete
     weight: 5
@@ -71,10 +77,6 @@ content:
       size: 60
       placeholder: ''
     third_party_settings: {  }
-  created:
-    type: datetime_timestamp
-    weight: 10
-    region: content
-    settings: {  }
-    third_party_settings: {  }
-hidden: {  }
+hidden:
+  promote: true
+  sticky: true

@@ -15,13 +15,6 @@ targetEntityType: node
 bundle: study_note
 mode: default
 content:
-  field_body:
-    type: basic_string
-    label: hidden
-    settings: {  }
-    third_party_settings: {  }
-    weight: 0
-    region: content
   field_area:
     type: entity_reference_label
     label: above
@@ -30,13 +23,12 @@ content:
     third_party_settings: {  }
     weight: 1
     region: content
-  field_subject:
-    type: entity_reference_label
-    label: above
-    settings:
-      link: true
+  field_body:
+    type: basic_string
+    label: hidden
+    settings: {  }
     third_party_settings: {  }
-    weight: 2
+    weight: 0
     region: content
   field_linked_decks:
     type: entity_reference_label
@@ -45,6 +37,14 @@ content:
       link: true
     third_party_settings: {  }
     weight: 3
+    region: content
+  field_subject:
+    type: entity_reference_label
+    label: above
+    settings:
+      link: true
+    third_party_settings: {  }
+    weight: 2
     region: content
   links:
     settings: {  }

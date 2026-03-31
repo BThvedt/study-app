@@ -15,21 +15,11 @@ targetEntityType: node
 bundle: study_note
 mode: default
 content:
-  title:
-    type: string_textfield
-    weight: 0
+  created:
+    type: datetime_timestamp
+    weight: 10
     region: content
-    settings:
-      size: 60
-      placeholder: ''
-    third_party_settings: {  }
-  field_body:
-    type: string_textarea
-    weight: 1
-    region: content
-    settings:
-      rows: 20
-      placeholder: 'Write your notes in Markdown...'
+    settings: {  }
     third_party_settings: {  }
   field_area:
     type: entity_reference_autocomplete
@@ -41,9 +31,17 @@ content:
       size: 60
       placeholder: ''
     third_party_settings: {  }
-  field_subject:
+  field_body:
+    type: string_textarea
+    weight: 1
+    region: content
+    settings:
+      rows: 20
+      placeholder: 'Write your notes in Markdown...'
+    third_party_settings: {  }
+  field_linked_decks:
     type: entity_reference_autocomplete
-    weight: 3
+    weight: 4
     region: content
     settings:
       match_operator: CONTAINS
@@ -51,9 +49,9 @@ content:
       size: 60
       placeholder: ''
     third_party_settings: {  }
-  field_linked_decks:
+  field_subject:
     type: entity_reference_autocomplete
-    weight: 4
+    weight: 3
     region: content
     settings:
       match_operator: CONTAINS
@@ -74,6 +72,14 @@ content:
     settings:
       display_label: true
     third_party_settings: {  }
+  title:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 60
+      placeholder: ''
+    third_party_settings: {  }
   uid:
     type: entity_reference_autocomplete
     weight: 5
@@ -84,10 +90,6 @@ content:
       size: 60
       placeholder: ''
     third_party_settings: {  }
-  created:
-    type: datetime_timestamp
-    weight: 10
-    region: content
-    settings: {  }
-    third_party_settings: {  }
-hidden: {  }
+hidden:
+  promote: true
+  sticky: true

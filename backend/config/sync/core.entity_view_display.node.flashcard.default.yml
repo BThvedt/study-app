@@ -14,13 +14,6 @@ targetEntityType: node
 bundle: flashcard
 mode: default
 content:
-  field_front:
-    type: basic_string
-    label: above
-    settings: {  }
-    third_party_settings: {  }
-    weight: 0
-    region: content
   field_back:
     type: basic_string
     label: above
@@ -35,6 +28,13 @@ content:
       link: true
     third_party_settings: {  }
     weight: 2
+    region: content
+  field_front:
+    type: basic_string
+    label: above
+    settings: {  }
+    third_party_settings: {  }
+    weight: 0
     region: content
   links:
     settings: {  }
