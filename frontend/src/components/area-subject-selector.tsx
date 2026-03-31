@@ -54,8 +54,8 @@ export function AreaSubjectSelector({
       .finally(() => setLoadingSubjects(false));
   }, [areaUuid]);
 
-  const handleAreaChange = (value: string) => {
-    onAreaChange(value === '__none__' ? '' : value);
+  const handleAreaChange = (value: string | null) => {
+    onAreaChange(!value || value === '__none__' ? '' : value);
     onSubjectChange('');
   };
 
@@ -87,7 +87,7 @@ export function AreaSubjectSelector({
         <Label htmlFor="subject-select">Subject</Label>
         <Select
           value={subjectUuid || '__none__'}
-          onValueChange={(v) => onSubjectChange(v === '__none__' ? '' : v)}
+          onValueChange={(v) => onSubjectChange(!v || v === '__none__' ? '' : v)}
           disabled={!areaUuid || loadingSubjects}
         >
           <SelectTrigger id="subject-select" className="w-full sm:w-48">
