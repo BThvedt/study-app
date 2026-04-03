@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, X, Brain, Play } from 'lucide-react';
+import { ArrowLeft, Plus, X, Brain, Play, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
 import { AiGenerateDialog } from '@/components/ai-generate-dialog';
@@ -36,6 +36,10 @@ export default function DeckDetailPage({
   const [included, setIncluded] = useState<JsonApiResource[]>([]);
   const [cards, setCards] = useState<JsonApiResource[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Delete state
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Add card form state
   const [showForm, setShowForm] = useState(false);
@@ -125,6 +129,19 @@ export default function DeckDetailPage({
     setFormError('');
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/decks/${id}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        router.push('/dashboard/decks');
+      }
+    } finally {
+      setDeleting(false);
+      setDeleteConfirm(false);
+    }
+  }
+
   if (!authenticated) return null;
 
   // Resolve area / subject names from included
@@ -184,34 +201,71 @@ export default function DeckDetailPage({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {cards.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  nativeButton={false}
-                  render={<Link href={`/dashboard/decks/${id}/study`} />}
-                >
-                  <Play className="h-4 w-4" />
-                  Study
-                </Button>
-              )}
-              <AiGenerateDialog deckId={id} onSaved={loadData} />
-              <Button
-                size="sm"
-                onClick={() => setShowForm((s) => !s)}
-              >
-                {showForm ? (
-                  <>
-                    <X className="h-4 w-4" />
+              {deleteConfirm ? (
+                <>
+                  <span className="text-sm text-muted-foreground hidden sm:inline">Delete this deck?</span>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                  >
+                    {deleting ? 'Deleting…' : 'Confirm'}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)}>
                     Cancel
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" />
-                    Add card
-                  </>
-                )}
-              </Button>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {cards.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      nativeButton={false}
+                      render={<Link href={`/dashboard/decks/${id}/study`} />}
+                    >
+                      <Play className="h-4 w-4" />
+                      Study
+                    </Button>
+                  )}
+                  <AiGenerateDialog deckId={id} onSaved={loadData} />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    nativeButton={false}
+                    render={<Link href={`/dashboard/decks/${id}/edit`} />}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setDeleteConfirm(true)}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Delete deck</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowForm((s) => !s)}
+                  >
+                    {showForm ? (
+                      <>
+                        <X className="h-4 w-4" />
+                        Cancel
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        Add card
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -301,7 +355,17 @@ export default function DeckDetailPage({
                   />
                 ))
               : cards.map((card, i) => (
-                  <FlashcardItem key={card.id} card={card} index={i} />
+                  <FlashcardItem
+                    key={card.id}
+                    card={card}
+                    index={i}
+                    onUpdated={(updated) =>
+                      setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+                    }
+                    onDeleted={(cardId) =>
+                      setCards((prev) => prev.filter((c) => c.id !== cardId))
+                    }
+                  />
                 ))}
           </div>
         )}

@@ -2,18 +2,158 @@
 
 import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command';
+import { ChevronsUpDown, Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface TaxonomyTerm {
   id: string;
   attributes: { name: string };
 }
+
+// ── Internal combobox ────────────────────────────────────────────────────────
+
+interface TaxonomyComboboxProps {
+  value: string;
+  onChange: (uuid: string) => void;
+  options: TaxonomyTerm[];
+  loading?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+  onCreate?: (name: string) => Promise<string | null>;
+}
+
+function TaxonomyCombobox({
+  value,
+  onChange,
+  options,
+  loading = false,
+  disabled = false,
+  placeholder = 'None',
+  onCreate,
+}: TaxonomyComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const selectedLabel = value
+    ? (options.find((o) => o.id === value)?.attributes.name ?? placeholder)
+    : placeholder;
+
+  const filtered = search.trim()
+    ? options.filter((o) =>
+        o.attributes.name.toLowerCase().includes(search.toLowerCase())
+      )
+    : options;
+
+  const exactMatch = options.some(
+    (o) => o.attributes.name.toLowerCase() === search.trim().toLowerCase()
+  );
+
+  const canCreate = !!onCreate && search.trim().length > 0 && !exactMatch && !creating;
+
+  function handleOpenChange(isOpen: boolean) {
+    setOpen(isOpen);
+    if (!isOpen) setSearch('');
+  }
+
+  function handleSelect(uuid: string) {
+    onChange(uuid);
+    setOpen(false);
+    setSearch('');
+  }
+
+  async function handleCreate() {
+    if (!canCreate || !onCreate) return;
+    setCreating(true);
+    try {
+      const newId = await onCreate(search.trim());
+      if (newId) handleSelect(newId);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
+        disabled={disabled || loading}
+        render={
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full sm:w-48 justify-between font-normal"
+          />
+        }
+      >
+        <span className={cn(!value && 'text-muted-foreground')}>
+          {loading ? 'Loading…' : selectedLabel}
+        </span>
+        <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+      </PopoverTrigger>
+
+      <PopoverContent className="w-[var(--anchor-width,12rem)] min-w-[12rem] p-0">
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Search…"
+          />
+          <CommandList>
+            <CommandGroup>
+              <CommandItem
+                value="__none__"
+                data-checked={!value}
+                onSelect={() => handleSelect('')}
+              >
+                <span className="text-muted-foreground">None</span>
+              </CommandItem>
+              {filtered.map((term) => (
+                <CommandItem
+                  key={term.id}
+                  value={term.id}
+                  data-checked={value === term.id}
+                  onSelect={() => handleSelect(term.id)}
+                >
+                  {term.attributes.name}
+                </CommandItem>
+              ))}
+              {filtered.length === 0 && !canCreate && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No results.
+                </p>
+              )}
+            </CommandGroup>
+
+            {canCreate && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem disabled={creating} onSelect={handleCreate}>
+                    <Plus className="h-3.5 w-3.5" />
+                    {creating ? 'Creating…' : `Create "${search.trim()}"`}
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ── AreaSubjectSelector ──────────────────────────────────────────────────────
 
 interface AreaSubjectSelectorProps {
   areaUuid: string;
@@ -54,62 +194,74 @@ export function AreaSubjectSelector({
       .finally(() => setLoadingSubjects(false));
   }, [areaUuid]);
 
-  const handleAreaChange = (value: string | null) => {
-    onAreaChange(!value || value === '__none__' ? '' : value);
+  async function createArea(name: string): Promise<string | null> {
+    const res = await fetch('/api/taxonomy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'area', name }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const newTerm: TaxonomyTerm = { id: data.data.id, attributes: { name } };
+    setAreas((prev) =>
+      [...prev, newTerm].sort((a, b) =>
+        a.attributes.name.localeCompare(b.attributes.name)
+      )
+    );
+    return data.data.id;
+  }
+
+  async function createSubject(name: string): Promise<string | null> {
+    if (!areaUuid) return null;
+    const res = await fetch('/api/taxonomy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'subject', name, areaUuid }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const newTerm: TaxonomyTerm = { id: data.data.id, attributes: { name } };
+    setSubjects((prev) =>
+      [...prev, newTerm].sort((a, b) =>
+        a.attributes.name.localeCompare(b.attributes.name)
+      )
+    );
+    return data.data.id;
+  }
+
+  function handleAreaChange(uuid: string) {
+    onAreaChange(uuid);
     onSubjectChange('');
-  };
+  }
 
   const containerClass =
-    layout === 'row'
-      ? 'flex flex-col sm:flex-row gap-3'
-      : 'flex flex-col gap-3';
+    layout === 'row' ? 'flex flex-col sm:flex-row gap-3' : 'flex flex-col gap-3';
 
   return (
     <div className={containerClass}>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="area-select">Area</Label>
-        <Select value={areaUuid || '__none__'} onValueChange={handleAreaChange}>
-          <SelectTrigger id="area-select" className="w-full sm:w-48">
-            <SelectValue placeholder={loadingAreas ? 'Loading…' : 'No area'} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">No area</SelectItem>
-            {areas.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.attributes.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label>Area</Label>
+        <TaxonomyCombobox
+          value={areaUuid}
+          onChange={handleAreaChange}
+          options={areas}
+          loading={loadingAreas}
+          placeholder="No area"
+          onCreate={createArea}
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="subject-select">Subject</Label>
-        <Select
-          value={subjectUuid || '__none__'}
-          onValueChange={(v) => onSubjectChange(!v || v === '__none__' ? '' : v)}
-          disabled={!areaUuid || loadingSubjects}
-        >
-          <SelectTrigger id="subject-select" className="w-full sm:w-48">
-            <SelectValue
-              placeholder={
-                !areaUuid
-                  ? 'Select an area first'
-                  : loadingSubjects
-                    ? 'Loading…'
-                    : 'No subject'
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">No subject</SelectItem>
-            {subjects.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.attributes.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label>Subject</Label>
+        <TaxonomyCombobox
+          value={subjectUuid}
+          onChange={onSubjectChange}
+          options={subjects}
+          loading={loadingSubjects}
+          disabled={!areaUuid}
+          placeholder={!areaUuid ? 'Select an area first' : 'No subject'}
+          onCreate={areaUuid ? createSubject : undefined}
+        />
       </div>
     </div>
   );

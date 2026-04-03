@@ -11,7 +11,7 @@ export async function GET() {
     `/jsonapi/node/study_note` +
       `?filter[uid.id][value]=${userUuid}` +
       `&include=field_area,field_subject,field_linked_decks` +
-      `&sort=-created` +
+      `&sort=-changed` +
       `&page[limit]=50`
   );
 

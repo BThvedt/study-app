@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -11,25 +11,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AreaSubjectSelector } from '@/components/area-subject-selector';
-import { ArrowLeft, Save, Eye, Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil, Eye, Save, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { JsonApiResource } from '@/lib/drupal';
 
 type MobileTab = 'write' | 'preview';
 
-export default function NewNotePage() {
-  const router = useRouter();
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+interface NoteResponse {
+  data: JsonApiResource;
+}
 
-  // Form state
+export default function EditNotePage({
+  params,
+}: {
+  params: Promise<{ noteid: string }>;
+}) {
+  const { noteid } = use(params);
+  const router = useRouter();
+
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [areaUuid, setAreaUuid] = useState('');
   const [subjectUuid, setSubjectUuid] = useState('');
-
-  // UI state
   const [mobileTab, setMobileTab] = useState<MobileTab>('write');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState('');
+
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -40,6 +53,29 @@ export default function NewNotePage() {
       });
   }, [router]);
 
+  useEffect(() => {
+    if (!authenticated) return;
+    setLoading(true);
+    fetch(`/api/notes/${noteid}`)
+      .then(async (res) => {
+        if (res.status === 404 || res.status === 403) {
+          setNotFound(true);
+          return;
+        }
+        if (res.ok) {
+          const data: NoteResponse = await res.json();
+          const note = data.data;
+          setTitle((note.attributes.title as string) ?? '');
+          setBody((note.attributes.field_body as string) ?? '');
+          const areaRel = note.relationships?.field_area?.data;
+          const subjectRel = note.relationships?.field_subject?.data;
+          setAreaUuid(areaRel && !Array.isArray(areaRel) ? areaRel.id : '');
+          setSubjectUuid(subjectRel && !Array.isArray(subjectRel) ? subjectRel.id : '');
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [authenticated, noteid]);
+
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.replace('/');
@@ -47,39 +83,71 @@ export default function NewNotePage() {
 
   async function handleSave() {
     if (!title.trim()) {
-      setError('Title is required.');
+      setSaveError('Title is required.');
       return;
     }
     setSaving(true);
-    setError('');
-
+    setSaveError('');
     try {
-      const res = await fetch('/api/notes', {
-        method: 'POST',
+      const res = await fetch(`/api/notes/${noteid}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: title.trim(),
           fieldBody: body,
-          areaUuid: areaUuid || undefined,
-          subjectUuid: subjectUuid || undefined,
+          areaUuid: areaUuid || null,
+          subjectUuid: subjectUuid || null,
         }),
       });
-
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error ?? 'Failed to save note.');
+        setSaveError(data.error ?? 'Failed to save note.');
         return;
       }
-
-      router.push('/dashboard/notes');
+      router.push(`/dashboard/notes?id=${noteid}`);
     } catch {
-      setError('An unexpected error occurred.');
+      setSaveError('An unexpected error occurred.');
     } finally {
       setSaving(false);
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/notes/${noteid}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        router.push('/dashboard/notes');
+      }
+    } finally {
+      setDeleting(false);
+      setDeleteConfirm(false);
+    }
+  }
+
   if (!authenticated) return null;
+
+  if (!loading && notFound) {
+    return (
+      <>
+        <Header authenticated onSignIn={() => {}} onSignUp={() => {}} onLogout={handleLogout} />
+        <main className="mx-auto max-w-4xl px-6 pt-28 pb-16 text-center">
+          <p className="text-lg font-semibold text-foreground">Note not found</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            It may have been deleted or you don&apos;t have permission to view it.
+          </p>
+          <Button
+            className="mt-6"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/dashboard/notes" />}
+          >
+            Back to notes
+          </Button>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -88,17 +156,26 @@ export default function NewNotePage() {
       {/* Top bar */}
       <div className="fixed top-16 left-0 right-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="mx-auto max-w-screen-2xl px-4 h-14 flex items-center gap-3">
-          <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link href="/dashboard/notes" />}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            nativeButton={false}
+            render={<Link href={`/dashboard/notes?id=${noteid}`} />}
+          >
             <ArrowLeft className="h-4 w-4" />
             <span className="sr-only">Back to notes</span>
           </Button>
 
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Note title…"
-            className="flex-1 h-8 border-0 bg-transparent text-base font-medium shadow-none focus-visible:ring-0 px-0"
-          />
+          {loading ? (
+            <div className="flex-1 h-5 animate-pulse rounded bg-muted" />
+          ) : (
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Note title…"
+              className="flex-1 h-8 border-0 bg-transparent text-base font-medium shadow-none focus-visible:ring-0 px-0"
+            />
+          )}
 
           {/* Mobile tab toggle */}
           <div className="flex md:hidden items-center rounded-lg border border-border overflow-hidden">
@@ -128,29 +205,53 @@ export default function NewNotePage() {
             </button>
           </div>
 
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            <Save className="h-4 w-4" />
-            {saving ? 'Saving…' : 'Save note'}
-          </Button>
+          {deleteConfirm ? (
+            <>
+              <span className="text-sm text-muted-foreground hidden sm:inline">Delete this note?</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting…' : 'Confirm'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setDeleteConfirm(true)}
+                className="text-muted-foreground hover:text-destructive"
+                disabled={loading}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Delete note</span>
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={saving || loading}>
+                <Save className="h-4 w-4" />
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </>
+          )}
         </div>
-        {error && (
-          <p className="px-4 pb-2 text-xs text-destructive">{error}</p>
+        {saveError && (
+          <p className="px-4 pb-2 text-xs text-destructive">{saveError}</p>
         )}
       </div>
 
-      {/* Editor area — starts below both header (64px) and top bar (56px) */}
+      {/* Editor area */}
       <div className="flex flex-col" style={{ paddingTop: '120px', height: '100dvh' }}>
-
-        {/* Split pane (desktop) / single pane (mobile) */}
         <div className="flex flex-1 overflow-hidden">
-
           {/* Write pane */}
           <div
             className={cn(
               'flex flex-col overflow-hidden',
-              // Desktop: always half width
               'md:w-1/2 md:flex md:border-r md:border-border',
-              // Mobile: show only when write tab active
               mobileTab === 'write' ? 'flex w-full' : 'hidden'
             )}
           >
@@ -159,6 +260,7 @@ export default function NewNotePage() {
               onChange={(e) => setBody(e.target.value)}
               placeholder="Write your notes in Markdown…"
               className="flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed focus-visible:ring-0 p-4 h-full"
+              disabled={loading}
             />
           </div>
 
@@ -166,9 +268,7 @@ export default function NewNotePage() {
           <div
             className={cn(
               'overflow-y-auto',
-              // Desktop: always half width
               'md:w-1/2 md:flex md:flex-col',
-              // Mobile: show only when preview tab active
               mobileTab === 'preview' ? 'flex w-full flex-col' : 'hidden'
             )}
           >
@@ -191,7 +291,7 @@ export default function NewNotePage() {
             <AreaSubjectSelector
               areaUuid={areaUuid}
               subjectUuid={subjectUuid}
-              onAreaChange={setAreaUuid}
+              onAreaChange={(uuid) => { setAreaUuid(uuid); setSubjectUuid(''); }}
               onSubjectChange={setSubjectUuid}
               layout="row"
             />

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AreaSubjectSelector } from '@/components/area-subject-selector';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Trash2 } from 'lucide-react';
 import type { JsonApiResource } from '@/lib/drupal';
 
 interface DeckResponse {
@@ -29,6 +29,8 @@ export default function EditDeckPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -110,6 +112,19 @@ export default function EditDeckPage({
     }
   };
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/decks/${id}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        router.push('/dashboard/decks');
+      }
+    } finally {
+      setDeleting(false);
+      setDeleteConfirm(false);
+    }
+  }
+
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.replace('/');
@@ -127,10 +142,10 @@ export default function EditDeckPage({
             variant="ghost"
             size="icon-sm"
             nativeButton={false}
-            render={<Link href={`/dashboard/decks/${id}`} />}
+            render={<Link href="/dashboard/decks" />}
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Back to deck</span>
+            <span className="sr-only">Back to decks</span>
           </Button>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Edit deck</h1>
         </div>
@@ -188,6 +203,42 @@ export default function EditDeckPage({
               >
                 Cancel
               </Button>
+            </div>
+
+            <div className="border-t border-border pt-6 mt-2">
+              {deleteConfirm ? (
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-muted-foreground">This will permanently delete the deck and all its cards.</p>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                  >
+                    {deleting ? 'Deleting…' : 'Confirm delete'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeleteConfirm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteConfirm(true)}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete deck
+                </Button>
+              )}
             </div>
           </form>
         )}
