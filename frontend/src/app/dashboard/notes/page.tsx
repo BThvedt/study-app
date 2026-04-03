@@ -1,8 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Suspense, useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -46,6 +44,14 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function NotesPage() {
+  return (
+    <Suspense>
+      <NotesPageContent />
+    </Suspense>
+  );
+}
+
+function NotesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
