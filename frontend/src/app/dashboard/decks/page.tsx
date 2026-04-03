@@ -169,7 +169,7 @@ export default function DecksPage() {
             <Select
               value={filterAreaId || '__all__'}
               onValueChange={(v) => {
-                setFilterAreaId(v === '__all__' ? '' : v);
+                setFilterAreaId(!v || v === '__all__' ? '' : v);
                 setFilterSubjectId('');
               }}
             >
@@ -191,7 +191,7 @@ export default function DecksPage() {
             {filterAreaId && (
               <Select
                 value={filterSubjectId || '__all__'}
-                onValueChange={(v) => setFilterSubjectId(v === '__all__' ? '' : v)}
+                onValueChange={(v) => setFilterSubjectId(!v || v === '__all__' ? '' : v)}
               >
                 <SelectTrigger className="h-8 w-auto min-w-32 text-sm">
                   <span className={cn(!filterSubjectId && 'text-muted-foreground')}>
