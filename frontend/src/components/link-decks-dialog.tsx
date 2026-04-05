@@ -349,7 +349,7 @@ export function LinkDecksDialog({
               <Select
                 value={filterAreaId || '__all__'}
                 onValueChange={(v) => {
-                  setFilterAreaId(v === '__all__' ? '' : v);
+                  setFilterAreaId(!v || v === '__all__' ? '' : v);
                   setFilterSubjectId('');
                 }}
               >
@@ -371,7 +371,7 @@ export function LinkDecksDialog({
               {filterAreaId && (
                 <Select
                   value={filterSubjectId || '__all__'}
-                  onValueChange={(v) => setFilterSubjectId(v === '__all__' ? '' : v)}
+                  onValueChange={(v) => setFilterSubjectId(!v || v === '__all__' ? '' : v)}
                 >
                   <SelectTrigger className="h-7 w-auto min-w-28 text-xs">
                     <span className={cn(!filterSubjectId && 'text-muted-foreground')}>
