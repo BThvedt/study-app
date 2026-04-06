@@ -11,6 +11,9 @@ import { logSession } from '@/lib/sessions';
 
 type Result = 'correct' | 'incorrect';
 
+const SLIDE_MS = 257;
+const FLIP_MS = 300;
+
 interface CardsResponse {
   data: JsonApiResource[];
 }
@@ -50,6 +53,13 @@ export default function StudyPage({
   const sessionStartedAt = useRef<string | null>(null);
   const sessionLogged = useRef(false);
 
+  // Animation state — snapshot of the card being exited
+  const [outgoing, setOutgoing] = useState<{ index: number; revealed: boolean } | null>(null);
+  const [slideDir, setSlideDir] = useState<'forward' | 'back'>('forward');
+  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+  const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     fetch('/api/auth/me')
       .then((r) => r.json())
@@ -87,23 +97,44 @@ export default function StudyPage({
   const incorrectCount = [...results.values()].filter((v) => v === 'incorrect').length;
   const progressPercent = total > 0 ? Math.round((index / total) * 100) : 0;
 
-  const flip = useCallback(() => setRevealed((r) => !r), []);
+  const flip = useCallback(() => {
+    if (slideTimerRef.current !== null) return;
+    setRevealed((r) => !r);
+  }, []);
+
+  // Snapshot the current card as outgoing, immediately update to the new card,
+  // then clear the snapshot after the CSS animation duration.
+  const navigateWithAnim = useCallback(
+    (direction: 'forward' | 'back', newIndex: number) => {
+      if (slideTimerRef.current !== null) return;
+      // Lock the stage height before adding the second card so the grid cell
+      // can't resize mid-animation (cards with different text lengths would
+      // otherwise cause a subtle vertical jump).
+      if (stageRef.current) setLockedHeight(stageRef.current.offsetHeight);
+      setOutgoing({ index, revealed });
+      setSlideDir(direction);
+      setIndex(newIndex);
+      setRevealed(false);
+      slideTimerRef.current = setTimeout(() => {
+        setOutgoing(null);
+        setLockedHeight(null);
+        slideTimerRef.current = null;
+      }, SLIDE_MS);
+    },
+    [index, revealed]
+  );
 
   const goBack = useCallback(() => {
-    if (index > 0) {
-      setIndex((i) => i - 1);
-      setRevealed(false);
-    }
-  }, [index]);
+    if (index > 0) navigateWithAnim('back', index - 1);
+  }, [index, navigateWithAnim]);
 
   const goForward = useCallback(() => {
     if (index + 1 >= total) {
       setDone(true);
     } else {
-      setIndex((i) => i + 1);
-      setRevealed(false);
+      navigateWithAnim('forward', index + 1);
     }
-  }, [index, total]);
+  }, [index, total, navigateWithAnim]);
 
   const record = useCallback(
     (result: Result) => {
@@ -142,8 +173,18 @@ export default function StudyPage({
     if (done) logCurrentSession();
   }, [done, logCurrentSession]);
 
+  const resetAnimState = useCallback(() => {
+    if (slideTimerRef.current) {
+      clearTimeout(slideTimerRef.current);
+      slideTimerRef.current = null;
+    }
+    setOutgoing(null);
+    setLockedHeight(null);
+  }, []);
+
   const restartAll = useCallback(() => {
     logCurrentSession();
+    resetAnimState();
     setSessionCards(cards);
     setIndex(0);
     setRevealed(false);
@@ -151,12 +192,13 @@ export default function StudyPage({
     setDone(false);
     sessionStartedAt.current = new Date().toISOString();
     sessionLogged.current = false;
-  }, [cards, logCurrentSession]);
+  }, [cards, logCurrentSession, resetAnimState]);
 
   const restartMissed = useCallback(() => {
     const missed = sessionCards.filter((c) => results.get(c.id) !== 'correct');
     if (missed.length === 0) return;
     logCurrentSession();
+    resetAnimState();
     setSessionCards(missed);
     setIndex(0);
     setRevealed(false);
@@ -164,7 +206,7 @@ export default function StudyPage({
     setDone(false);
     sessionStartedAt.current = new Date().toISOString();
     sessionLogged.current = false;
-  }, [sessionCards, results, logCurrentSession]);
+  }, [sessionCards, results, logCurrentSession, resetAnimState]);
 
   // Keyboard controls
   useEffect(() => {
@@ -343,36 +385,115 @@ export default function StudyPage({
 
       {/* Card area */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 sm:px-8 py-8 gap-5">
-        {/* The card — click to flip */}
+        {/* Card stage — both the outgoing and incoming card live here simultaneously */}
         <div
-          role="button"
-          tabIndex={0}
-          onClick={flip}
-          onKeyDown={(e) => {
-            if (e.key === ' ') flip();
-            else if (e.key === 'Enter') revealed ? record('correct') : flip();
+          ref={stageRef}
+          className="w-full max-w-2xl overflow-hidden rounded-2xl"
+          style={{
+            display: 'grid',
+            ...(lockedHeight !== null ? { height: lockedHeight } : {}),
           }}
-          className="w-full max-w-2xl min-h-52 rounded-2xl border border-border bg-card p-8 flex flex-col items-center justify-center text-center gap-4 cursor-pointer transition-colors hover:border-ring/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <div className="w-full">
-            <p className="text-lg font-medium text-foreground leading-relaxed whitespace-pre-wrap">
-              {front}
-            </p>
-          </div>
-
-          {revealed && (
-            <>
-              <div className="w-full border-t border-border" />
-              <div className="w-full">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-3">
-                  Answer
-                </p>
-                <p className="text-lg text-foreground leading-relaxed whitespace-pre-wrap">
-                  {back}
-                </p>
+          {/* Outgoing card — rendered only during the slide transition */}
+          {outgoing !== null && (() => {
+            const outCard = sessionCards[outgoing.index];
+            const outFront = (outCard?.attributes.field_front as string) ?? '';
+            const outBack  = (outCard?.attributes.field_back  as string) ?? '';
+            return (
+              <div
+                key={`out-${outgoing.index}`}
+                style={{
+                  gridRow: '1', gridColumn: '1',
+                  animation: `${slideDir === 'forward' ? 'card-slide-out-left' : 'card-slide-out-right'} ${SLIDE_MS}ms ease forwards`,
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                }}
+              >
+                <div style={{ perspective: '1200px' }}>
+                  <div
+                    style={{
+                      transformStyle: 'preserve-3d',
+                      transform: outgoing.revealed ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                      transition: 'none',
+                      display: 'grid',
+                    }}
+                  >
+                    <div
+                      style={{ gridRow: '1', gridColumn: '1', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' } as React.CSSProperties}
+                      className="rounded-2xl border border-border bg-card p-8 flex flex-col items-center justify-center text-center min-h-52"
+                    >
+                      <p className="text-lg font-medium text-foreground leading-relaxed whitespace-pre-wrap">{outFront}</p>
+                    </div>
+                    <div
+                      style={{ gridRow: '1', gridColumn: '1', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' } as React.CSSProperties}
+                      className="rounded-2xl border border-primary/30 bg-card p-8 flex flex-col items-center justify-center text-center gap-4 min-h-52"
+                    >
+                      <div className="w-full">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-3">Answer</p>
+                        <p className="text-lg text-foreground leading-relaxed whitespace-pre-wrap">{outBack}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </>
-          )}
+            );
+          })()}
+
+          {/* Incoming / current card */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={flip}
+            onKeyDown={(e) => {
+              if (e.key === ' ') flip();
+              else if (e.key === 'Enter') revealed ? record('correct') : flip();
+            }}
+            style={{
+              gridRow: '1', gridColumn: '1',
+              animation: outgoing !== null
+                ? `${slideDir === 'forward' ? 'card-slide-in-from-right' : 'card-slide-in-from-left'} ${SLIDE_MS}ms ease forwards`
+                : 'none',
+              zIndex: 1,
+            }}
+            className="group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl cursor-pointer"
+          >
+            <div style={{ perspective: '1200px' }}>
+              <div
+                style={{
+                  transformStyle: 'preserve-3d',
+                  transform: revealed ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                  transition: `transform ${FLIP_MS}ms ease`,
+                  display: 'grid',
+                }}
+              >
+                {/* Front face */}
+                <div
+                  style={{ gridRow: '1', gridColumn: '1', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' } as React.CSSProperties}
+                  className="rounded-2xl border border-border bg-card p-8 flex flex-col items-center justify-center text-center min-h-52 transition-colors group-hover:border-ring/50"
+                >
+                  <p className="text-lg font-medium text-foreground leading-relaxed whitespace-pre-wrap">
+                    {front}
+                  </p>
+                  <p className="mt-6 text-xs text-muted-foreground/40 select-none">click to flip</p>
+                </div>
+
+                {/* Back face */}
+                <div
+                  style={{ gridRow: '1', gridColumn: '1', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' } as React.CSSProperties}
+                  className="rounded-2xl border border-primary/30 bg-card p-8 flex flex-col items-center justify-center text-center gap-4 min-h-52 transition-colors group-hover:border-primary/60"
+                >
+                  <div className="w-full">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-3">
+                      Answer
+                    </p>
+                    <p className="text-lg text-foreground leading-relaxed whitespace-pre-wrap">
+                      {back}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Numeric indicator */}

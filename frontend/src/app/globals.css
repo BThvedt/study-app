@@ -215,3 +215,21 @@ button:not(:disabled),
 .prose :where(hr) {
   border-color: var(--border);
 }
+
+/* Flashcard slide animations */
+@keyframes card-slide-out-left {
+  from { transform: translateX(0px);    opacity: 1; }
+  to   { transform: translateX(-105px); opacity: 0; }
+}
+@keyframes card-slide-out-right {
+  from { transform: translateX(0px);   opacity: 1; }
+  to   { transform: translateX(105px); opacity: 0; }
+}
+@keyframes card-slide-in-from-right {
+  from { transform: translateX(105px); opacity: 0; }
+  to   { transform: translateX(0px);   opacity: 1; }
+}
+@keyframes card-slide-in-from-left {
+  from { transform: translateX(-105px); opacity: 0; }
+  to   { transform: translateX(0px);    opacity: 1; }
+}
