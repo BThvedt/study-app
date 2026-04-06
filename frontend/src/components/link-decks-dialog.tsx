@@ -294,7 +294,7 @@ export function LinkDecksDialog({
         render={
           <Button variant="outline">
             <Link2 className="h-4 w-4" />
-            {selectedIds.length > 0 ? 'Linked Decks' : 'Link Decks'}
+            {selectedIds.length > 0 ? 'Decks' : 'Link Decks'}
             {selectedIds.length > 0 && (
               <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
                 {selectedIds.length}

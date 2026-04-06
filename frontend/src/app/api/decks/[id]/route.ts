@@ -77,6 +77,38 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
+  // Unlink this deck from any notes that reference it before deleting
+  const notesRes = await drupalFetch(
+    `/jsonapi/node/study_note?filter[field_linked_decks.id][value]=${id}`
+  );
+  if (notesRes.ok) {
+    const notesData = await notesRes.json();
+    const notes: Array<{
+      id: string;
+      relationships?: { field_linked_decks?: { data?: Array<{ id: string; type: string }> } };
+    }> = notesData.data ?? [];
+
+    for (const note of notes) {
+      const currentDecks = Array.isArray(note.relationships?.field_linked_decks?.data)
+        ? note.relationships.field_linked_decks.data
+        : [];
+      const updatedDecks = currentDecks.filter((d) => d.id !== id);
+
+      await drupalFetch(`/jsonapi/node/study_note/${note.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          data: {
+            type: 'node--study_note',
+            id: note.id,
+            relationships: {
+              field_linked_decks: { data: updatedDecks },
+            },
+          },
+        }),
+      });
+    }
+  }
+
   const res = await drupalFetch(`/jsonapi/node/flashcard_deck/${id}`, {
     method: 'DELETE',
   });

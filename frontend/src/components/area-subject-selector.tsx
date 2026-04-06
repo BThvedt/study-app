@@ -30,6 +30,7 @@ interface TaxonomyComboboxProps {
   disabled?: boolean;
   placeholder?: string;
   onCreate?: (name: string) => Promise<string | null>;
+  compact?: boolean;
 }
 
 function TaxonomyCombobox({
@@ -40,6 +41,7 @@ function TaxonomyCombobox({
   disabled = false,
   placeholder = 'None',
   onCreate,
+  compact = false,
 }: TaxonomyComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -92,7 +94,10 @@ function TaxonomyCombobox({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="w-full sm:w-48 justify-between font-normal"
+            className={cn(
+              'justify-between font-normal',
+              compact ? 'w-32' : 'w-full sm:w-48'
+            )}
           />
         }
       >
@@ -161,6 +166,8 @@ interface AreaSubjectSelectorProps {
   onAreaChange: (uuid: string) => void;
   onSubjectChange: (uuid: string) => void;
   layout?: 'row' | 'col';
+  hideLabels?: boolean;
+  compact?: boolean;
 }
 
 export function AreaSubjectSelector({
@@ -169,6 +176,8 @@ export function AreaSubjectSelector({
   onAreaChange,
   onSubjectChange,
   layout = 'row',
+  hideLabels = false,
+  compact = false,
 }: AreaSubjectSelectorProps) {
   const [areas, setAreas] = useState<TaxonomyTerm[]>([]);
   const [subjects, setSubjects] = useState<TaxonomyTerm[]>([]);
@@ -234,13 +243,16 @@ export function AreaSubjectSelector({
     onSubjectChange('');
   }
 
-  const containerClass =
-    layout === 'row' ? 'flex flex-col sm:flex-row gap-3' : 'flex flex-col gap-3';
+  const containerClass = compact
+    ? 'flex flex-row gap-2'
+    : layout === 'row'
+    ? 'flex flex-col sm:flex-row gap-3'
+    : 'flex flex-col gap-3';
 
   return (
     <div className={containerClass}>
       <div className="flex flex-col gap-1.5">
-        <Label>Area</Label>
+        {!hideLabels && <Label>Area</Label>}
         <TaxonomyCombobox
           value={areaUuid}
           onChange={handleAreaChange}
@@ -248,11 +260,12 @@ export function AreaSubjectSelector({
           loading={loadingAreas}
           placeholder="No area"
           onCreate={createArea}
+          compact={compact}
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label>Subject</Label>
+        {!hideLabels && <Label>Subject</Label>}
         <TaxonomyCombobox
           value={subjectUuid}
           onChange={onSubjectChange}
@@ -261,6 +274,7 @@ export function AreaSubjectSelector({
           disabled={!areaUuid}
           placeholder={!areaUuid ? 'Select an area first' : 'No subject'}
           onCreate={areaUuid ? createSubject : undefined}
+          compact={compact}
         />
       </div>
     </div>

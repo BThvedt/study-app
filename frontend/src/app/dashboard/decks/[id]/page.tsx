@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, X, Brain, Play, Pencil, Trash2, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, X, Brain, Play, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
 import { AiGenerateDialog } from '@/components/ai-generate-dialog';
@@ -42,9 +42,7 @@ export default function DeckDetailPage({
   const [included, setIncluded] = useState<JsonApiResource[]>([]);
   const [cards, setCards] = useState<JsonApiResource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [linkedNotes, setLinkedNotes] = useState<JsonApiResource[]>([]);
-  const [linkedNotesIncluded, setLinkedNotesIncluded] = useState<JsonApiResource[]>([]);
-  const [loadingLinkedNotes, setLoadingLinkedNotes] = useState(true);
+  const [linkedNoteIds, setLinkedNoteIds] = useState<string[]>([]);
 
   // Delete state
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -67,16 +65,14 @@ export default function DeckDetailPage({
   }, [router]);
 
   const loadLinkedNotes = useCallback(async () => {
-    setLoadingLinkedNotes(true);
     try {
       const res = await fetch(`/api/decks/${id}/notes`);
       if (res.ok) {
         const d: LinkedNotesResponse = await res.json();
-        setLinkedNotes(d.data ?? []);
-        setLinkedNotesIncluded(d.included ?? []);
+        setLinkedNoteIds((d.data ?? []).map((n: JsonApiResource) => n.id as string));
       }
-    } finally {
-      setLoadingLinkedNotes(false);
+    } catch {
+      // non-critical
     }
   }, [id]);
 
@@ -191,7 +187,8 @@ export default function DeckDetailPage({
       <main className="mx-auto max-w-4xl px-6 pt-28 pb-16">
         {/* Page header */}
         <div className="mb-8">
-          <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+            {/* Left: back + title + meta */}
             <div className="flex items-start gap-3 min-w-0">
               <Button
                 variant="ghost"
@@ -208,15 +205,16 @@ export default function DeckDetailPage({
                 {loading || !deck ? (
                   <div className="h-8 w-48 animate-pulse rounded-lg bg-muted" />
                 ) : (
-                  <h1 className="text-3xl font-bold tracking-tight text-foreground truncate">
-                    {deck.attributes.title as string}
-                  </h1>
-                )}
-
-                {(areaName || subjectName) && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {areaName && <Badge variant="secondary">{areaName}</Badge>}
-                    {subjectName && <Badge variant="outline">{subjectName}</Badge>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground truncate">
+                      {deck.attributes.title as string}
+                    </h1>
+                    {(areaName || subjectName) && (
+                      <div className="flex flex-wrap items-center gap-1.5 sm:ml-3">
+                        {areaName && <Badge variant="secondary">{areaName}</Badge>}
+                        {subjectName && <Badge variant="outline">{subjectName}</Badge>}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -226,9 +224,10 @@ export default function DeckDetailPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Right: button rows */}
+            <div className="shrink-0 pl-9 sm:pl-0">
               {deleteConfirm ? (
-                <>
+                <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground hidden sm:inline">Delete this deck?</span>
                   <Button
                     variant="destructive"
@@ -241,56 +240,70 @@ export default function DeckDetailPage({
                   <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)}>
                     Cancel
                   </Button>
-                </>
+                </div>
               ) : (
-                <>
-                  {cards.length > 0 && (
+                <div className="flex flex-col items-start sm:items-end gap-2">
+                  {/* Row 1: primary actions */}
+                  <div className="flex items-center gap-2">
+                    {!loading && cards.length > 0 && (
+                      <Button
+                        nativeButton={false}
+                        render={<Link href={`/dashboard/decks/${id}/study`} />}
+                        size="sm"
+                      >
+                        <Play className="h-4 w-4" />
+                        Study this deck
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowForm((s) => !s)}
+                    >
+                      {showForm ? (
+                        <>
+                          <X className="h-4 w-4" />
+                          Cancel
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4" />
+                          Add card
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Row 2: tools + management */}
+                  <div className="flex items-center gap-2">
+                    <AiGenerateDialog deckId={id} onSaved={loadData} />
+                    <LinkNotesDialog
+                      deckId={id}
+                      deckAreaUuid={areaId ?? ''}
+                      deckSubjectUuid={subjectId ?? ''}
+                      onLinksChanged={loadLinkedNotes}
+                      initialLinkedNoteIds={linkedNoteIds}
+                    />
                     <Button
                       variant="outline"
                       size="sm"
                       nativeButton={false}
-                      render={<Link href={`/dashboard/decks/${id}/study`} />}
+                      render={<Link href={`/dashboard/decks/${id}/edit`} />}
                     >
-                      <Play className="h-4 w-4" />
-                      Study
+                      <Pencil className="h-4 w-4" />
+                      Edit
                     </Button>
-                  )}
-                  <AiGenerateDialog deckId={id} onSaved={loadData} />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    nativeButton={false}
-                    render={<Link href={`/dashboard/decks/${id}/edit`} />}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setDeleteConfirm(true)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Delete deck</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setShowForm((s) => !s)}
-                  >
-                    {showForm ? (
-                      <>
-                        <X className="h-4 w-4" />
-                        Cancel
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4" />
-                        Add card
-                      </>
-                    )}
-                  </Button>
-                </>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setDeleteConfirm(true)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Delete deck</span>
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -396,76 +409,6 @@ export default function DeckDetailPage({
           </div>
         )}
 
-        {/* Linked Notes section */}
-        <div className="mt-12">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">
-              {loadingLinkedNotes
-                ? 'Linked Notes'
-                : `Linked Notes${linkedNotes.length > 0 ? ` · ${linkedNotes.length}` : ''}`}
-            </h2>
-            <LinkNotesDialog
-              deckId={id}
-              deckAreaUuid={areaId ?? ''}
-              deckSubjectUuid={subjectId ?? ''}
-              onLinksChanged={loadLinkedNotes}
-            />
-          </div>
-
-          {loadingLinkedNotes ? (
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-14 animate-pulse rounded-xl border border-border bg-card" />
-              ))}
-            </div>
-          ) : linkedNotes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 mb-3">
-                <FileText className="h-5 w-5 text-primary" />
-              </div>
-              <p className="text-sm font-medium text-foreground">No linked notes</p>
-              <p className="mt-1 text-xs text-muted-foreground max-w-xs">
-                Link study notes to this deck to keep related content connected.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {linkedNotes.map((note) => {
-                const aRel = note.relationships?.field_area?.data;
-                const sRel = note.relationships?.field_subject?.data;
-                const aId = aRel && !Array.isArray(aRel) ? aRel.id : null;
-                const sId = sRel && !Array.isArray(sRel) ? sRel.id : null;
-                const notAreaName = aId
-                  ? (linkedNotesIncluded.find((r) => r.id === aId)?.attributes.name as string | undefined)
-                  : undefined;
-                const notSubjectName = sId
-                  ? (linkedNotesIncluded.find((r) => r.id === sId)?.attributes.name as string | undefined)
-                  : undefined;
-                return (
-                  <a
-                    key={note.id}
-                    href={`/dashboard/notes?id=${note.id}`}
-                    className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-ring/50 transition-colors"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                      <FileText className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {note.attributes.title as string}
-                      </p>
-                      {(notAreaName || notSubjectName) && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          {[notAreaName, notSubjectName].filter(Boolean).join(' · ')}
-                        </p>
-                      )}
-                    </div>
-                  </a>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </main>
     </>
   );

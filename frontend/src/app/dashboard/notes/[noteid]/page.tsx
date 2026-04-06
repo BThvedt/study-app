@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AreaSubjectSelector } from '@/components/area-subject-selector';
 import { LinkDecksDialog } from '@/components/link-decks-dialog';
+import { NoteAiDialog } from '@/components/note-ai-dialog';
 import { ArrowLeft, Pencil, Eye, Save, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
@@ -160,6 +161,7 @@ export default function EditNotePage({
 
       {/* Top bar */}
       <div className="fixed top-16 left-0 right-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
+        {/* Row 1: back · title · delete · save */}
         <div className="mx-auto max-w-screen-2xl px-4 h-14 flex items-center gap-3">
           <Button
             variant="ghost"
@@ -181,34 +183,6 @@ export default function EditNotePage({
               className="flex-1 h-8 border-0 bg-transparent text-base font-medium shadow-none focus-visible:ring-0 px-0"
             />
           )}
-
-          {/* Mobile tab toggle */}
-          <div className="flex md:hidden items-center rounded-lg border border-border overflow-hidden">
-            <button
-              onClick={() => setMobileTab('write')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
-                mobileTab === 'write'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Pencil className="h-3 w-3" />
-              Write
-            </button>
-            <button
-              onClick={() => setMobileTab('preview')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
-                mobileTab === 'preview'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Eye className="h-3 w-3" />
-              Preview
-            </button>
-          </div>
 
           {deleteConfirm ? (
             <>
@@ -244,13 +218,73 @@ export default function EditNotePage({
             </>
           )}
         </div>
+
+        {/* Row 2: area · subject · decks · AI (scrollable on mobile) */}
+        <div className="mx-auto max-w-screen-2xl px-4 pb-2.5 flex items-center gap-2 overflow-x-auto">
+          <AreaSubjectSelector
+            areaUuid={areaUuid}
+            subjectUuid={subjectUuid}
+            onAreaChange={(uuid) => { setAreaUuid(uuid); setSubjectUuid(''); }}
+            onSubjectChange={setSubjectUuid}
+            layout="row"
+            hideLabels
+            compact
+          />
+          <LinkDecksDialog
+            selectedIds={linkedDeckIds}
+            onChange={setLinkedDeckIds}
+            noteAreaUuid={areaUuid}
+            noteSubjectUuid={subjectUuid}
+          />
+          <NoteAiDialog
+            noteId={noteid}
+            noteBody={body}
+            noteTitle={title}
+            noteAreaUuid={areaUuid}
+            noteSubjectUuid={subjectUuid}
+            linkedDeckIds={linkedDeckIds}
+            onBodyChange={setBody}
+            onLinksChange={setLinkedDeckIds}
+          />
+        </div>
+
+        {/* Row 3: write / preview toggle — mobile only */}
+        <div className="md:hidden mx-auto max-w-screen-2xl px-4 pb-2.5 flex items-center gap-2">
+          <div className="flex items-center rounded-lg border border-border overflow-hidden">
+            <button
+              onClick={() => setMobileTab('write')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
+                mobileTab === 'write'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Pencil className="h-3 w-3" />
+              Write
+            </button>
+            <button
+              onClick={() => setMobileTab('preview')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
+                mobileTab === 'preview'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Eye className="h-3 w-3" />
+              Preview
+            </button>
+          </div>
+        </div>
+
         {saveError && (
           <p className="px-4 pb-2 text-xs text-destructive">{saveError}</p>
         )}
       </div>
 
-      {/* Editor area */}
-      <div className="flex flex-col" style={{ paddingTop: '120px', height: '100dvh' }}>
+      {/* Editor area — pt-[210px] on mobile (3 rows), md:pt-[168px] on desktop (2 rows) */}
+      <div className="flex flex-col pt-[210px] md:pt-[168px]" style={{ height: '100dvh' }}>
         <div className="flex flex-1 overflow-hidden">
           {/* Write pane */}
           <div
@@ -286,28 +320,6 @@ export default function EditNotePage({
                 Preview will appear here as you write.
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Bottom metadata bar */}
-        <div className="border-t border-border bg-background px-4 py-3">
-          <div className="mx-auto max-w-screen-2xl">
-            <Label className="text-xs text-muted-foreground mb-2 block">Categorise</Label>
-            <div className="flex flex-wrap items-end gap-3">
-              <AreaSubjectSelector
-                areaUuid={areaUuid}
-                subjectUuid={subjectUuid}
-                onAreaChange={(uuid) => { setAreaUuid(uuid); setSubjectUuid(''); }}
-                onSubjectChange={setSubjectUuid}
-                layout="row"
-              />
-              <LinkDecksDialog
-                selectedIds={linkedDeckIds}
-                onChange={setLinkedDeckIds}
-                noteAreaUuid={areaUuid}
-                noteSubjectUuid={subjectUuid}
-              />
-            </div>
           </div>
         </div>
       </div>

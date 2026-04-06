@@ -36,6 +36,7 @@ interface LinkNotesDialogProps {
   deckAreaUuid?: string;
   deckSubjectUuid?: string;
   onLinksChanged?: () => void;
+  initialLinkedNoteIds?: string[];
 }
 
 export function LinkNotesDialog({
@@ -43,6 +44,7 @@ export function LinkNotesDialog({
   deckAreaUuid = '',
   deckSubjectUuid = '',
   onLinksChanged,
+  initialLinkedNoteIds,
 }: LinkNotesDialogProps) {
   const [open, setOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +56,7 @@ export function LinkNotesDialog({
   const [loadingNotes, setLoadingNotes] = useState(false);
 
   // Currently linked note IDs, loaded fresh each time the dialog opens
-  const [originalLinkedIds, setOriginalLinkedIds] = useState<string[]>([]);
+  const [originalLinkedIds, setOriginalLinkedIds] = useState<string[]>(initialLinkedNoteIds ?? []);
   const [loadingLinked, setLoadingLinked] = useState(false);
 
   // Search mode state
@@ -62,7 +64,7 @@ export function LinkNotesDialog({
   const [searchLoading, setSearchLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const [localSelected, setLocalSelected] = useState<string[]>([]);
+  const [localSelected, setLocalSelected] = useState<string[]>(initialLinkedNoteIds ?? []);
   const [filterAreaId, setFilterAreaId] = useState('');
   const [filterSubjectId, setFilterSubjectId] = useState('');
   const [search, setSearch] = useState('');
@@ -71,6 +73,13 @@ export function LinkNotesDialog({
   const [saveError, setSaveError] = useState('');
 
   const isSearchMode = search.trim().length >= 2;
+
+  useEffect(() => {
+    if (!open && initialLinkedNoteIds) {
+      setOriginalLinkedIds(initialLinkedNoteIds);
+      setLocalSelected(initialLinkedNoteIds);
+    }
+  }, [initialLinkedNoteIds, open]);
 
   async function loadNotes() {
     setLoadingNotes(true);
@@ -303,7 +312,7 @@ export function LinkNotesDialog({
         render={
           <Button variant="outline">
             <Link2 className="h-4 w-4" />
-            {linkedCount > 0 ? 'Linked Notes' : 'Link Notes'}
+            {linkedCount > 0 ? 'Notes' : 'Link Notes'}
             {linkedCount > 0 && (
               <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
                 {linkedCount}

@@ -20,6 +20,6 @@ default_value_callback: ''
 settings:
   handler: 'default:user'
   handler_settings:
-    include_anonymous: false
     auto_create: false
+    include_anonymous: false
 field_type: entity_reference

@@ -139,7 +139,7 @@ export function AiGenerateDialog({ deckId, onSaved }: AiGenerateDialogProps) {
         render={
           <Button variant="outline" size="sm">
             <Sparkles className="h-4 w-4" />
-            Generate with AI
+            AI
           </Button>
         }
       />
