@@ -1,0 +1,47 @@
+---
+description: Architecture and conventions for the spaced repetition (Study Now) feature
+globs: frontend/src/lib/srs.ts,frontend/src/app/dashboard/study/**,frontend/src/app/api/cards/route.ts
+alwaysApply: false
+---
+
+# Spaced Repetition (Study Now) Feature
+
+## Storage
+
+All SRS state lives in **`localStorage`** under the key `srs_data`.  
+Shape: `Record<cardId, CardSRSData>` — see `frontend/src/lib/srs.ts` for the full interface.
+
+Do not duplicate this data in Drupal or any server-side store. All reads/writes go through the helpers in `srs.ts` (`loadSRSPool`, `saveSRSPool`).
+
+## Pool Cap & Eviction
+
+- Maximum **500 cards** in the pool at once (constant `POOL_CAP` in `srs.ts`).
+- When enrolling a new card would exceed the cap, evict the **oldest retired card first** (by `addedToQueueAt`), then the oldest active card.
+- This preserves mastered cards as long as possible while still making room for new ones.
+
+## Retirement
+
+A card is retired when either:
+1. `repetitions >= RETIREMENT_STREAK` (currently **5**) after a correct answer — auto-retire.
+2. The user clicks "Retire this card" during a session — calls `retireCard()`.
+
+Retired cards stay in the pool (count toward 500) and are excluded from future queues. The `countMastered()` helper counts them for the dashboard stat.
+
+## SM-2 Constants
+
+| Parameter | Value | Note |
+|---|---|---|
+| Initial ease factor | `2.5` | Do not change without testing interval growth |
+| Ease factor floor | `1.3` | Prevents intervals collapsing on hard cards |
+| Retirement streak | `5` | Correct-in-a-row threshold |
+| First correct interval | 1 day → 6 days → × easeFactor | Standard SM-2 schedule |
+
+Do not change these constants without considering the downstream effect on existing pool data.
+
+## `/api/cards` Route
+
+Must return `field_front`, `field_back`, `created`, and `field_deck` with included deck data (`field_area`, `field_subject`) for filtering to work. It paginates Drupal's JSON:API automatically — do not add client-side pagination logic on top of it.
+
+## Filtering
+
+Area/subject filtering is applied **client-side** in `buildSessionQueue()` against `deckAreaId`/`deckSubjectId` on each `StudyCard`. The `AreaSubjectSelector` component (already built) is reused on the setup screen.

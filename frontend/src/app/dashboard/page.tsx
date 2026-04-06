@@ -6,10 +6,12 @@ import Link from 'next/link';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { BookOpen, Brain, BarChart3, Flame, Clock, Trophy, FileText } from 'lucide-react';
+import { loadSRSPool, countMastered } from '@/lib/srs';
 
 export default function Dashboard() {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [mastered, setMastered] = useState(0);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -19,6 +21,7 @@ export default function Dashboard() {
           router.replace('/');
         } else {
           setAuthenticated(true);
+          setMastered(countMastered(loadSRSPool()));
         }
       });
   }, [router]);
@@ -50,7 +53,7 @@ export default function Dashboard() {
           {[
             { icon: <Flame className="h-5 w-5 text-primary" />, label: 'Day streak', value: '0' },
             { icon: <Clock className="h-5 w-5 text-primary" />, label: 'Minutes studied', value: '0' },
-            { icon: <Trophy className="h-5 w-5 text-primary" />, label: 'Cards mastered', value: '0' },
+            { icon: <Trophy className="h-5 w-5 text-primary" />, label: 'Cards mastered', value: String(mastered) },
           ].map(({ icon, label, value }) => (
             <div
               key={label}
@@ -76,7 +79,7 @@ export default function Dashboard() {
               title: 'Study now',
               description: 'Review cards that are due today.',
               action: 'Start session',
-              href: null,
+              href: '/dashboard/study',
             },
             {
               icon: <BookOpen className="h-6 w-6 text-primary" />,
