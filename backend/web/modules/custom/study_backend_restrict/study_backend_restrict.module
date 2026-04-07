@@ -1,0 +1,46 @@
+<?php
+
+/**
+ * @file
+ * Blocks non-admin users from logging in via the Drupal backend login form.
+ *
+ * The OAuth2 token endpoint used by the frontend is unaffected.
+ */
+
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\user\Entity\User;
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function study_backend_restrict_form_user_login_form_alter(array &$form, FormStateInterface $form_state): void {
+  $form['#validate'][] = 'study_backend_restrict_login_validate';
+}
+
+/**
+ * Custom login form validator — blocks non-admin backend logins.
+ *
+ * Runs after the standard credential and flood validators. If the authenticated
+ * account lacks admin privileges the UID is cleared and a form error is set,
+ * which prevents the submit handler from completing the login.
+ */
+function study_backend_restrict_login_validate(array $form, FormStateInterface $form_state): void {
+  $uid = $form_state->get('uid');
+  if (!$uid) {
+    // Credentials were invalid — the existing error is already set.
+    return;
+  }
+
+  $account = User::load($uid);
+  if (!$account) {
+    return;
+  }
+
+  // Allow uid 1 (super-admin) and any user with full admin permission.
+  if ((int) $account->id() === 1 || $account->hasPermission('administer site configuration')) {
+    return;
+  }
+
+  $form_state->set('uid', NULL);
+  $form_state->setErrorByName('name', t('You do not have permission to access this area.'));
+}

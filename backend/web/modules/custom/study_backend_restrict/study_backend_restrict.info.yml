@@ -1,0 +1,7 @@
+name: Study Backend Restrict
+type: module
+description: Blocks non-admin users from logging in via the Drupal backend form.
+core_version_requirement: ^10 || ^11
+package: Custom
+dependencies:
+  - drupal:user
