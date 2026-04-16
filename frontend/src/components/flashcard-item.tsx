@@ -2,6 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import {
+  MUTATION_QUEUED_MESSAGE,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 import { Pencil, Trash2, Check, X } from 'lucide-react';
 import type { JsonApiResource } from '@/lib/drupal';
 
@@ -10,9 +14,17 @@ interface FlashcardItemProps {
   index: number;
   onUpdated?: (card: JsonApiResource) => void;
   onDeleted?: (cardId: string) => void;
+  /** Fired while inline edit mode is open when text differs from saved values. */
+  onEditDirtyChange?: (cardId: string, dirty: boolean) => void;
 }
 
-export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardItemProps) {
+export function FlashcardItem({
+  card,
+  index,
+  onUpdated,
+  onDeleted,
+  onEditDirtyChange,
+}: FlashcardItemProps) {
   const [flipped, setFlipped] = useState(false);
   const [editing, setEditing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -21,6 +33,7 @@ export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardIt
 
   const [editFront, setEditFront] = useState('');
   const [editBack, setEditBack] = useState('');
+  const [mutationError, setMutationError] = useState('');
   const frontRef = useRef<HTMLTextAreaElement>(null);
 
   const front = card.attributes.field_front as string;
@@ -32,21 +45,37 @@ export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardIt
     setEditBack(back);
     setEditing(true);
     setDeleteConfirm(false);
+    setMutationError('');
   }
 
   function cancelEditing() {
     setEditing(false);
+    setMutationError('');
   }
 
   useEffect(() => {
     if (editing) frontRef.current?.focus();
   }, [editing]);
 
+  useEffect(() => {
+    if (!onEditDirtyChange) return;
+    const id = card.id as string;
+    if (!editing) {
+      onEditDirtyChange(id, false);
+      return;
+    }
+    const dirty =
+      editFront.trim() !== (front ?? '').trim() ||
+      editBack.trim() !== (back ?? '').trim();
+    onEditDirtyChange(id, dirty);
+  }, [editing, editFront, editBack, front, back, card.id, onEditDirtyChange]);
+
   async function saveEdit(e: React.MouseEvent | React.FormEvent) {
     e.stopPropagation();
     e.preventDefault();
     if (!editFront.trim() || !editBack.trim()) return;
     setSaving(true);
+    setMutationError('');
     try {
       const res = await fetch(`/api/cards/${card.id}`, {
         method: 'PATCH',
@@ -57,6 +86,11 @@ export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardIt
         const data = await res.json();
         onUpdated?.(data.data);
         setEditing(false);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMutationError(
+          userFacingMessageForApiError(res, data, 'Failed to save card.')
+        );
       }
     } finally {
       setSaving(false);
@@ -70,10 +104,23 @@ export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardIt
       return;
     }
     setDeleting(true);
+    setMutationError('');
     try {
       const res = await fetch(`/api/cards/${card.id}`, { method: 'DELETE' });
-      if (res.ok || res.status === 204) {
+      if (res.status === 202) {
+        const data = await res.json().catch(() => ({}));
+        if ((data as { queued?: boolean }).queued) {
+          setMutationError(MUTATION_QUEUED_MESSAGE);
+        } else {
+          setMutationError('Unexpected response. Please try again.');
+        }
+      } else if (res.status === 204) {
         onDeleted?.(card.id);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMutationError(
+          userFacingMessageForApiError(res, data, 'Failed to delete card.')
+        );
       }
     } finally {
       setDeleting(false);
@@ -115,6 +162,10 @@ export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardIt
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
+
+        {mutationError && (
+          <p className="text-xs text-destructive">{mutationError}</p>
+        )}
 
         <div className="flex items-center gap-2 pt-1">
           <button
@@ -180,7 +231,11 @@ export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardIt
               <Pencil className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); setDeleteConfirm(true); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMutationError('');
+                setDeleteConfirm(true);
+              }}
               className="rounded-md p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
               aria-label="Delete card"
             >
@@ -211,6 +266,10 @@ export function FlashcardItem({ card, index, onUpdated, onDeleted }: FlashcardIt
       <p className="mt-3 text-[11px] text-muted-foreground/60 group-hover:text-muted-foreground transition-colors">
         Click to flip
       </p>
+
+      {mutationError && (
+        <p className="mt-2 text-xs text-destructive pr-16">{mutationError}</p>
+      )}
     </div>
   );
 }

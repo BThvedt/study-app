@@ -5,6 +5,12 @@ import Link from 'next/link';
 import { FileText, Layers, Search, X, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  SEARCH_HTTP_FALLBACK_MESSAGE,
+  messageWhenSearchRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 
 type ResultType = 'study_note' | 'flashcard_deck';
 type FilterType = 'all' | 'note' | 'deck';
@@ -58,6 +64,7 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
       setResults([]);
       setTotal(0);
       setSearched(false);
+      setSearchError('');
     }
   }, [open]);
 
@@ -101,12 +108,19 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
             setResults(data.results ?? []);
             setTotal(data.total ?? 0);
           } else {
+            const data = await res.json().catch(() => ({}));
             setResults([]);
-            setSearchError('Search is unavailable offline.');
+            setSearchError(
+              userFacingMessageForApiError(
+                res,
+                data,
+                SEARCH_HTTP_FALLBACK_MESSAGE
+              )
+            );
           }
         } catch {
           setResults([]);
-          setSearchError('Search is unavailable offline.');
+          setSearchError(messageWhenSearchRequestThrows());
         } finally {
           setLoading(false);
           setSearched(true);
@@ -251,7 +265,14 @@ export function SearchDialog({ open, onClose }: SearchDialogProps) {
           )}
 
           {searchError && !loading && (
-            <div className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
+            <div
+              className={cn(
+                'flex flex-col items-center gap-2 py-12 text-center text-sm',
+                searchError === SESSION_EXPIRED_MESSAGE
+                  ? 'text-destructive'
+                  : 'text-muted-foreground',
+              )}
+            >
               <p>{searchError}</p>
             </div>
           )}

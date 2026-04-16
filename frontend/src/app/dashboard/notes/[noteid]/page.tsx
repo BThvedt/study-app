@@ -15,14 +15,38 @@ import { AreaSubjectSelector } from '@/components/area-subject-selector';
 import { LinkDecksDialog } from '@/components/link-decks-dialog';
 import { LinkRelatedNotesDialog } from '@/components/link-related-notes-dialog';
 import { NoteAiDialog } from '@/components/note-ai-dialog';
+import { UnsavedChangesGuard } from '@/components/unsaved-changes-guard';
 import { ArrowLeft, Pencil, Eye, Save, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import {
+  MUTATION_QUEUED_MESSAGE,
+  OFFLINE_ACTION_MESSAGE,
+  messageWhenNetworkRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 
 type MobileTab = 'write' | 'preview';
 
 interface NoteResponse {
   data: JsonApiResource;
+}
+
+type NoteSnapshot = {
+  title: string;
+  body: string;
+  areaUuid: string;
+  subjectUuid: string;
+  linkedDeckIds: string[];
+  linkedNoteIds: string[];
+};
+
+function linkedIdsEqual(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((v, i) => v === sb[i]);
 }
 
 export default function EditNotePage({
@@ -49,12 +73,17 @@ export default function EditNotePage({
 
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const [savedSnapshot, setSavedSnapshot] = useState<NoteSnapshot | null>(null);
 
   const authenticated = useAuth();
+  const { isOnline } = useOnlineStatus();
 
   useEffect(() => {
     if (!authenticated) return;
     setLoading(true);
+    setSavedSnapshot(null);
     fetch(`/api/notes/${noteid}`)
       .then(async (res) => {
         if (res.status === 404 || res.status === 403) {
@@ -71,9 +100,19 @@ export default function EditNotePage({
           const linkedDecksRel = note.relationships?.field_linked_decks?.data;
           setAreaUuid(areaRel && !Array.isArray(areaRel) ? areaRel.id : '');
           setSubjectUuid(subjectRel && !Array.isArray(subjectRel) ? subjectRel.id : '');
-          setLinkedDeckIds(Array.isArray(linkedDecksRel) ? linkedDecksRel.map((r) => r.id) : []);
           const linkedNotesRel = note.relationships?.field_linked_notes?.data;
-          setLinkedNoteIds(Array.isArray(linkedNotesRel) ? linkedNotesRel.map((r) => r.id) : []);
+          const deckIds = Array.isArray(linkedDecksRel) ? linkedDecksRel.map((r) => r.id) : [];
+          const noteIds = Array.isArray(linkedNotesRel) ? linkedNotesRel.map((r) => r.id) : [];
+          setLinkedDeckIds(deckIds);
+          setLinkedNoteIds(noteIds);
+          setSavedSnapshot({
+            title: (note.attributes.title as string) ?? '',
+            body: (note.attributes.field_body as string) ?? '',
+            areaUuid: areaRel && !Array.isArray(areaRel) ? areaRel.id : '',
+            subjectUuid: subjectRel && !Array.isArray(subjectRel) ? subjectRel.id : '',
+            linkedDeckIds: deckIds,
+            linkedNoteIds: noteIds,
+          });
         }
       })
       .finally(() => setLoading(false));
@@ -113,7 +152,9 @@ export default function EditNotePage({
       if (!res.ok) {
         try {
           const data = await res.json();
-          setSaveError(data.error ?? 'Failed to save note.');
+          setSaveError(
+            userFacingMessageForApiError(res, data, 'Failed to save note.')
+          );
         } catch {
           setQueued(true);
         }
@@ -133,15 +174,37 @@ export default function EditNotePage({
   }
 
   async function handleDelete() {
+    setDeleteError('');
+    if (!isOnline) {
+      setDeleteError(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
     setDeleting(true);
     try {
       const res = await fetch(`/api/notes/${noteid}`, { method: 'DELETE' });
-      if (res.ok || res.status === 204) {
-        router.push('/dashboard/notes');
+      if (res.status === 202) {
+        const data = await res.json().catch(() => ({}));
+        if ((data as { queued?: boolean }).queued) {
+          setDeleteError(MUTATION_QUEUED_MESSAGE);
+          return;
+        }
+        setDeleteError('Unexpected response. Please try again.');
+        return;
       }
+      if (res.status === 204) {
+        setDeleteConfirm(false);
+        setDeleteError('');
+        router.push('/dashboard/notes');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(
+        userFacingMessageForApiError(res, data, 'Failed to delete note.')
+      );
+    } catch {
+      setDeleteError(messageWhenNetworkRequestThrows());
     } finally {
       setDeleting(false);
-      setDeleteConfirm(false);
     }
   }
 
@@ -169,8 +232,19 @@ export default function EditNotePage({
     );
   }
 
+  const isDirty =
+    !!savedSnapshot &&
+    !loading &&
+    (title !== savedSnapshot.title ||
+      body !== savedSnapshot.body ||
+      areaUuid !== savedSnapshot.areaUuid ||
+      subjectUuid !== savedSnapshot.subjectUuid ||
+      !linkedIdsEqual(linkedDeckIds, savedSnapshot.linkedDeckIds) ||
+      !linkedIdsEqual(linkedNoteIds, savedSnapshot.linkedNoteIds));
+
   return (
     <>
+      <UnsavedChangesGuard isDirty={isDirty} />
       <Header authenticated onSignIn={() => {}} onSignUp={() => {}} onLogout={handleLogout} />
 
       {/* Top bar */}
@@ -209,7 +283,14 @@ export default function EditNotePage({
               >
                 {deleting ? 'Deleting…' : 'Confirm'}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDeleteConfirm(false);
+                  setDeleteError('');
+                }}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </>
@@ -218,7 +299,10 @@ export default function EditNotePage({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => setDeleteConfirm(true)}
+                onClick={() => {
+                  setDeleteError('');
+                  setDeleteConfirm(true);
+                }}
                 className="text-muted-foreground hover:text-destructive"
                 disabled={loading}
               >
@@ -299,6 +383,9 @@ export default function EditNotePage({
           </div>
         </div>
 
+        {deleteError && (
+          <p className="px-4 pb-2 text-xs text-destructive">{deleteError}</p>
+        )}
         {saveError && !queued && (
           <p className="px-4 pb-2 text-xs text-destructive">{saveError}</p>
         )}

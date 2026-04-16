@@ -10,6 +10,11 @@ import { Label } from '@/components/ui/label';
 import { UserCircle, KeyRound, CheckCircle, AlertCircle, Loader2, WifiOff } from 'lucide-react';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { cn } from '@/lib/utils';
+import {
+  OFFLINE_ACTION_MESSAGE,
+  messageWhenNetworkRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 
 interface ProfileData {
   uuid: string;
@@ -78,6 +83,10 @@ export default function ProfilePage() {
   async function handleUsernameSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim()) return;
+    if (!isOnline) {
+      setUsernameStatus({ type: 'error', message: OFFLINE_ACTION_MESSAGE });
+      return;
+    }
     setUsernameStatus({ type: 'loading' });
 
     try {
@@ -91,15 +100,29 @@ export default function ProfilePage() {
       });
       clearTimeout(timeout);
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setProfile((p) => p ? { ...p, name: data.name } : p);
+        const name =
+          typeof (data as { name?: unknown }).name === 'string'
+            ? (data as { name: string }).name
+            : username.trim();
+        setProfile((p) => (p ? { ...p, name } : p));
         setUsernameStatus({ type: 'success', message: 'Username updated successfully.' });
       } else {
-        setUsernameStatus({ type: 'error', message: data.error ?? 'Failed to update username.' });
+        setUsernameStatus({
+          type: 'error',
+          message: userFacingMessageForApiError(
+            res,
+            data,
+            'Failed to update username.'
+          ),
+        });
       }
     } catch {
-      setUsernameStatus({ type: 'error', message: 'You appear to be offline. Please try again when you have a connection.' });
+      setUsernameStatus({
+        type: 'error',
+        message: messageWhenNetworkRequestThrows(),
+      });
     }
   }
 
@@ -113,6 +136,10 @@ export default function ProfilePage() {
     }
     if (newPassword.length < 5) {
       setPasswordStatus({ type: 'error', message: 'New password must be at least 5 characters.' });
+      return;
+    }
+    if (!isOnline) {
+      setPasswordStatus({ type: 'error', message: OFFLINE_ACTION_MESSAGE });
       return;
     }
 
@@ -129,17 +156,27 @@ export default function ProfilePage() {
       });
       clearTimeout(timeout);
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         setPasswordStatus({ type: 'success', message: 'Password updated successfully.' });
       } else {
-        setPasswordStatus({ type: 'error', message: data.error ?? 'Failed to update password.' });
+        setPasswordStatus({
+          type: 'error',
+          message: userFacingMessageForApiError(
+            res,
+            data,
+            'Failed to update password.'
+          ),
+        });
       }
     } catch {
-      setPasswordStatus({ type: 'error', message: 'You appear to be offline. Please try again when you have a connection.' });
+      setPasswordStatus({
+        type: 'error',
+        message: messageWhenNetworkRequestThrows(),
+      });
     }
   }
 

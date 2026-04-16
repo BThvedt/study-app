@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, useCallback, useMemo, useRef, createContext, useContext } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import Link from 'next/link';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,13 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
+import {
+  MUTATION_QUEUED_MESSAGE,
+  OFFLINE_ACTION_MESSAGE,
+  SESSION_EXPIRED_MESSAGE,
+  messageWhenNetworkRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 
 // ── Sortable item ──────────────────────────────────────────────────────────────
 
@@ -194,10 +202,14 @@ function TodosPageContent() {
   }
   const [creating, setCreating] = useState(false);
   const [createQueued, setCreateQueued] = useState(false);
+  const [createListError, setCreateListError] = useState('');
 
   // Add-item state
   const [newItemText, setNewItemText] = useState('');
   const [addingItem, setAddingItem] = useState(false);
+  const [addItemError, setAddItemError] = useState('');
+  const [todoSessionMessage, setTodoSessionMessage] = useState('');
+  const [listDeleteError, setListDeleteError] = useState('');
   const addItemInputRef = useRef<HTMLInputElement>(null);
   const clickedElsewhereRef = useRef(false);
 
@@ -222,6 +234,12 @@ function TodosPageContent() {
   const includedRef = useRef<JsonApiResource[]>([]);
   useEffect(() => { notesTextRef.current = notesText; }, [notesText]);
   useEffect(() => { includedRef.current = included; }, [included]);
+
+  function flagTodoSessionExpired(res: Response) {
+    if (res.status === 401) {
+      setTodoSessionMessage(SESSION_EXPIRED_MESSAGE);
+    }
+  }
 
   // Fire-and-forget saves for any notes that differ from what Drupal has stored.
   // Uses keepalive: true so the request survives page unload.
@@ -273,11 +291,12 @@ function TodosPageContent() {
       )
     );
     try {
-      await fetch(`/api/todo-items/${itemId}`, {
+      const res = await fetch(`/api/todo-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes: text }),
       });
+      flagTodoSessionExpired(res);
     } catch { /* queued */ }
   }
 
@@ -287,6 +306,7 @@ function TodosPageContent() {
   const [newItemNotes, setNewItemNotes] = useState('');
 
   const authenticated = useAuth();
+  const { isOnline } = useOnlineStatus();
 
   useEffect(() => {
     const id = searchParams.get('id');
@@ -309,6 +329,8 @@ function TodosPageContent() {
         const data = await res.json();
         setLists(data.data ?? []);
         setIncluded(data.included ?? []);
+        setTodoSessionMessage('');
+        setListDeleteError('');
       }
     } catch {
       // Offline or timeout — keep whatever state we have
@@ -341,6 +363,7 @@ function TodosPageContent() {
     if (!newListTitle.trim()) return;
     setCreating(true);
     setCreateQueued(false);
+    setCreateListError('');
     try {
       const res = await Promise.race([
         fetch('/api/todos', {
@@ -363,6 +386,11 @@ function TodosPageContent() {
         setCreateQueued(false);
         await loadLists();
         selectList(data.data.id);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setCreateListError(
+          userFacingMessageForApiError(res, data, 'Failed to create list.')
+        );
       }
     } catch {
       setCreateQueued(true);
@@ -375,19 +403,42 @@ function TodosPageContent() {
 
   async function handleDeleteList(listId: string) {
     if (!confirm('Delete this list and all its items?')) return;
-    setLists((prev) => prev.filter((l) => l.id !== listId));
-    if (selectedId === listId) {
-      setSelectedId(null);
-      setMobileShowDetail(false);
-      router.replace('/dashboard/todos', { scroll: false });
+    setListDeleteError('');
+    if (!isOnline) {
+      setListDeleteError(OFFLINE_ACTION_MESSAGE);
+      return;
     }
     try {
-      await Promise.race([
+      const res = await Promise.race([
         fetch(`/api/todos/${listId}`, { method: 'DELETE' }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
       ]);
+      if (res.status === 202) {
+        const body = await res.json().catch(() => ({}));
+        if ((body as { queued?: boolean }).queued) {
+          setListDeleteError(MUTATION_QUEUED_MESSAGE);
+          return;
+        }
+        setListDeleteError('Unexpected response. Please try again.');
+        return;
+      }
+      if (res.status === 204) {
+        setLists((prev) => prev.filter((l) => l.id !== listId));
+        if (selectedId === listId) {
+          setSelectedId(null);
+          setMobileShowDetail(false);
+          router.replace('/dashboard/todos', { scroll: false });
+        }
+        return;
+      }
+      flagTodoSessionExpired(res);
+      if (res.status === 401) return;
+      const body = await res.json().catch(() => ({}));
+      setListDeleteError(
+        userFacingMessageForApiError(res, body, 'Failed to delete list.')
+      );
     } catch {
-      // Queued by SW for later sync
+      setListDeleteError(messageWhenNetworkRequestThrows());
     }
   }
 
@@ -397,6 +448,7 @@ function TodosPageContent() {
     e.preventDefault();
     if (!newItemText.trim() || !selectedId) return;
     setAddingItem(true);
+    setAddItemError('');
     clickedElsewhereRef.current = false;
 
     function onClickElsewhere(ev: MouseEvent) {
@@ -435,6 +487,11 @@ function TodosPageContent() {
         if (!clickedElsewhereRef.current) {
           setTimeout(() => addItemInputRef.current?.focus(), 0);
         }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setAddItemError(
+          userFacingMessageForApiError(res, data, 'Could not add item.')
+        );
       }
     } catch {
       setNewItemText('');
@@ -492,11 +549,12 @@ function TodosPageContent() {
       )
     );
     try {
-      await fetch(`/api/todos/${selectedList.id}`, {
+      const res = await fetch(`/api/todos/${selectedList.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
       });
+      flagTodoSessionExpired(res);
     } catch { /* queued */ }
   }
 
@@ -516,11 +574,12 @@ function TodosPageContent() {
       )
     );
     try {
-      await fetch(`/api/todo-items/${itemId}`, {
+      const res = await fetch(`/api/todo-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
+      flagTodoSessionExpired(res);
     } catch { /* queued */ }
   }
 
@@ -533,11 +592,12 @@ function TodosPageContent() {
       )
     );
     try {
-      await fetch(`/api/todo-items/${itemId}`, {
+      const res = await fetch(`/api/todo-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ priority }),
       });
+      flagTodoSessionExpired(res);
     } catch { /* queued */ }
   }
 
@@ -553,11 +613,12 @@ function TodosPageContent() {
       )
     );
     try {
-      await fetch(`/api/todo-items/${itemId}`, {
+      const res = await fetch(`/api/todo-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ completed: !currentCompleted }),
       });
+      flagTodoSessionExpired(res);
     } catch { /* queued */ } finally {
       setTogglingIds((s) => {
         const next = new Set(s);
@@ -584,7 +645,7 @@ function TodosPageContent() {
       })
     );
     try {
-      await Promise.race([
+      const res = await Promise.race([
         fetch(`/api/todo-items/${itemId}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
@@ -592,6 +653,7 @@ function TodosPageContent() {
         }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
       ]);
+      flagTodoSessionExpired(res);
     } catch {
       // Queued by SW for later sync
     } finally {
@@ -687,11 +749,12 @@ function TodosPageContent() {
     );
 
     try {
-      await fetch(`/api/todos/${selectedList.id}`, {
+      const res = await fetch(`/api/todos/${selectedList.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemOrder: reordered }),
       });
+      flagTodoSessionExpired(res);
     } catch { /* queued */ }
   }
 
@@ -728,8 +791,42 @@ function TodosPageContent() {
     <>
       <Header authenticated onSignIn={() => {}} onSignUp={() => {}} onLogout={handleLogout} />
 
-      <div className="fixed inset-x-0 bottom-0 top-16 flex">
-
+      <div className="fixed inset-x-0 bottom-0 top-16 flex flex-col">
+        {todoSessionMessage && (
+          <div
+            role="alert"
+            className="flex shrink-0 items-center justify-between gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+          >
+            <span>{todoSessionMessage}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setTodoSessionMessage('')}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
+        {listDeleteError && (
+          <div
+            role="alert"
+            className="flex shrink-0 items-center justify-between gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+          >
+            <span>{listDeleteError}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setListDeleteError('')}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
+        <div className="flex min-h-0 flex-1">
         {/* ── Sidebar ─────────────────────────────────────────────────────── */}
         <aside
           className={cn(
@@ -1160,6 +1257,9 @@ function TodosPageContent() {
                     className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 )}
+                {addItemError && (
+                  <p className="text-sm text-destructive">{addItemError}</p>
+                )}
               </form>
             </div>
           ) : (
@@ -1169,10 +1269,20 @@ function TodosPageContent() {
             </div>
           )}
         </main>
+        </div>
       </div>
 
       {/* Create list dialog */}
-      <Dialog open={createOpen} onOpenChange={(next) => { setCreateOpen(next); if (!next) setCreateQueued(false); }}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(next) => {
+          setCreateOpen(next);
+          if (!next) {
+            setCreateQueued(false);
+            setCreateListError('');
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>New todo list</DialogTitle>
@@ -1202,6 +1312,9 @@ function TodosPageContent() {
                 autoFocus
                 disabled={creating || createQueued}
               />
+              {createListError && !createQueued && (
+                <p className="text-sm text-destructive">{createListError}</p>
+              )}
               {createQueued && (
                 <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-3 text-sm text-amber-200">
                   List saved offline. It will appear once you reconnect.

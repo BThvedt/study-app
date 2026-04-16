@@ -1,0 +1,7 @@
+name: 'Study flashcard cascade delete'
+type: module
+description: 'Deletes flashcard nodes when their parent flashcard deck is deleted.'
+package: Custom
+core_version_requirement: ^11
+dependencies:
+  - drupal:node

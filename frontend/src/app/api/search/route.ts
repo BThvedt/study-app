@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drupalFetch } from '@/lib/drupal';
+import { drupalFetch, getCurrentUserUuid } from '@/lib/drupal';
 
 /**
  * GET /api/search?q=...&type=all|note|deck&area=<uuid>&subject=<uuid>
  * Proxies to the custom Drupal search endpoint.
  */
 export async function GET(request: NextRequest) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q') ?? '';
   const type = searchParams.get('type') ?? 'all';

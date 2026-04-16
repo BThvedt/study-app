@@ -1,5 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drupalFetch } from '@/lib/drupal';
+import { drupalFetch, getCurrentUserUuid } from '@/lib/drupal';
+
+const DRUPAL_BASE = process.env.NEXT_PUBLIC_DRUPAL_BASE_URL ?? '';
+const FLASHCARDS_PAGE_LIMIT = 50;
+
+/**
+ * Deletes every flashcard that belongs to this deck (JSON:API pagination).
+ * Ensures cards are removed even if the Drupal cascade module is not enabled.
+ */
+async function deleteAllFlashcardsForDeck(deckUuid: string): Promise<Response | null> {
+  const base =
+    `/jsonapi/node/flashcard` +
+    `?filter[field_deck.id][value]=${encodeURIComponent(deckUuid)}` +
+    `&fields[node--flashcard]=id` +
+    `&page[limit]=${FLASHCARDS_PAGE_LIMIT}`;
+
+  let nextPath: string | null = base;
+
+  while (nextPath) {
+    const listRes = await drupalFetch(nextPath);
+    if (!listRes.ok) {
+      return listRes;
+    }
+
+    const json = (await listRes.json()) as {
+      data?: Array<{ id: string }>;
+      links?: { next?: { href?: string } };
+    };
+
+    for (const card of json.data ?? []) {
+      const delRes = await drupalFetch(`/jsonapi/node/flashcard/${card.id}`, {
+        method: 'DELETE',
+      });
+      if (!delRes.ok) {
+        return delRes;
+      }
+    }
+
+    const nextHref = json.links?.next?.href ?? null;
+    if (nextHref) {
+      nextPath = nextHref.startsWith(DRUPAL_BASE)
+        ? nextHref.slice(DRUPAL_BASE.length)
+        : nextHref;
+    } else {
+      nextPath = null;
+    }
+  }
+
+  return null;
+}
 
 export async function GET(
   _request: NextRequest,
@@ -22,6 +71,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json();
 
@@ -75,6 +129,11 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { id } = await params;
 
   // Unlink this deck from any notes that reference it before deleting
@@ -107,6 +166,14 @@ export async function DELETE(
         }),
       });
     }
+  }
+
+  const cardsDeleteError = await deleteAllFlashcardsForDeck(id);
+  if (cardsDeleteError) {
+    return NextResponse.json(
+      { error: 'Failed to delete cards in this deck' },
+      { status: cardsDeleteError.status }
+    );
   }
 
   const res = await drupalFetch(`/jsonapi/node/flashcard_deck/${id}`, {

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drupalFetch } from '@/lib/drupal';
+import { drupalFetch, getCurrentUserUuid } from '@/lib/drupal';
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json();
 
@@ -41,6 +46,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { id } = await params;
 
   const res = await drupalFetch(`/jsonapi/node/flashcard/${id}`, {

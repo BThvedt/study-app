@@ -20,6 +20,12 @@ import {
 } from '@/components/ui/select';
 import { ExternalLink, FileText, Link2, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  SEARCH_HTTP_FALLBACK_MESSAGE,
+  messageWhenSearchRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 import type { JsonApiResource } from '@/lib/drupal';
 
 interface SearchNoteResult {
@@ -58,6 +64,7 @@ export function LinkRelatedNotesDialog({
   const [searchResults, setSearchResults] = useState<SearchNoteResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const [localSelected, setLocalSelected] = useState<string[]>([]);
   const [filterAreaId, setFilterAreaId] = useState('');
@@ -89,10 +96,12 @@ export function LinkRelatedNotesDialog({
       setSearch('');
       setSearchResults([]);
       setSearched(false);
+      setSearchError('');
       if (notes.length === 0 && !loadingNotes) loadNotes();
       setTimeout(() => searchInputRef.current?.focus(), 50);
     } else {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      setSearchError('');
     }
   }
 
@@ -102,10 +111,12 @@ export function LinkRelatedNotesDialog({
       setSearchResults([]);
       setSearchLoading(false);
       setSearched(false);
+      setSearchError('');
       return;
     }
     setSearchLoading(true);
     debounceRef.current = setTimeout(async () => {
+      setSearchError('');
       try {
         const params = new URLSearchParams({ q: q.trim(), type: 'note' });
         const res = await fetch(`/api/search?${params}`);
@@ -116,7 +127,16 @@ export function LinkRelatedNotesDialog({
               (r: SearchNoteResult) => r.type === 'study_note' && r.uuid !== excludeNoteId
             )
           );
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setSearchResults([]);
+          setSearchError(
+            userFacingMessageForApiError(res, data, SEARCH_HTTP_FALLBACK_MESSAGE)
+          );
         }
+      } catch {
+        setSearchResults([]);
+        setSearchError(messageWhenSearchRequestThrows());
       } finally {
         setSearchLoading(false);
         setSearched(true);
@@ -382,6 +402,17 @@ export function LinkRelatedNotesDialog({
                 </div>
               ) : !searched ? (
                 <p className="py-12 text-center text-sm text-muted-foreground">Searching…</p>
+              ) : searchError ? (
+                <p
+                  className={cn(
+                    'py-12 px-4 text-center text-sm',
+                    searchError === SESSION_EXPIRED_MESSAGE
+                      ? 'text-destructive'
+                      : 'text-muted-foreground',
+                  )}
+                >
+                  {searchError}
+                </p>
               ) : searchResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground gap-2">
                   <FileText className="h-5 w-5 opacity-40" />

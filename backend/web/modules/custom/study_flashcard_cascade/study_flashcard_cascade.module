@@ -1,0 +1,52 @@
+<?php
+
+/**
+ * @file
+ * Deletes child flashcards when a flashcard_deck node is deleted.
+ */
+
+use Drupal\Core\Database\Query\SelectInterface;
+use Drupal\node\NodeInterface;
+
+/**
+ * Implements hook_node_predelete().
+ */
+function study_flashcard_cascade_node_predelete(NodeInterface $node): void {
+  if ($node->bundle() !== 'flashcard_deck') {
+    return;
+  }
+
+  $deck_nid = (int) $node->id();
+  $connection = \Drupal::database();
+
+  // Prefer the field table: entityQuery on translatable entity references can
+  // miss rows depending on language metadata; SQL matches all langcode rows.
+  $nids = [];
+  if ($connection->schema()->tableExists('node__field_deck')) {
+    $nids = $connection->select('node__field_deck', 'fd')
+      ->fields('fd', ['entity_id'])
+      ->condition('field_deck_target_id', $deck_nid)
+      ->condition('bundle', 'flashcard')
+      ->condition('deleted', 0)
+      ->distinct()
+      ->execute()
+      ->fetchCol();
+  }
+
+  if (!$nids) {
+    $ids = \Drupal::entityQuery('node')
+      ->accessCheck(FALSE)
+      ->condition('type', 'flashcard')
+      ->condition('field_deck.target_id', $deck_nid)
+      ->execute();
+    $nids = $ids ? array_values($ids) : [];
+  }
+
+  if (!$nids) {
+    return;
+  }
+
+  $storage = \Drupal::entityTypeManager()->getStorage('node');
+  $cards = $storage->loadMultiple($nids);
+  $storage->delete($cards);
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drupalFetch } from '@/lib/drupal';
+import { drupalFetch, getCurrentUserUuid } from '@/lib/drupal';
 
 export async function GET(
   _request: NextRequest,
@@ -23,6 +23,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json();
 
@@ -72,6 +77,11 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { id } = await params;
 
   const res = await drupalFetch(`/jsonapi/node/todo_list/${id}`, {

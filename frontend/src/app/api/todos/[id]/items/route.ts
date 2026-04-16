@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drupalFetch } from '@/lib/drupal';
+import { drupalFetch, getCurrentUserUuid } from '@/lib/drupal';
 
 // Add a new todo item to a list.
 // Because field_items uses entity_reference_revisions, adding an item requires:
@@ -10,6 +10,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json();
 

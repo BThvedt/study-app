@@ -61,8 +61,9 @@ function study_todo_entity_access(EntityInterface $entity, string $operation, Ac
  *
  * Allows authenticated users to create todo_item paragraphs.
  */
-function study_todo_entity_create_access(AccountInterface $account, array $context, string $entity_bundle): AccessResultInterface {
-  if (($context['entity_type_id'] ?? '') !== 'paragraph' || $entity_bundle !== 'todo_item') {
+function study_todo_entity_create_access(AccountInterface $account, array $context, ?string $entity_bundle = NULL): AccessResultInterface {
+  // $entity_bundle is NULL when create access is checked without a specific bundle.
+  if (($context['entity_type_id'] ?? '') !== 'paragraph' || ($entity_bundle ?? '') !== 'todo_item') {
     return AccessResult::neutral();
   }
 

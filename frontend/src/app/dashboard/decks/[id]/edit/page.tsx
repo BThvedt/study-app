@@ -12,6 +12,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { AreaSubjectSelector } from '@/components/area-subject-selector';
 import { ArrowLeft, Save, Trash2 } from 'lucide-react';
 import type { JsonApiResource } from '@/lib/drupal';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import {
+  MUTATION_QUEUED_MESSAGE,
+  OFFLINE_ACTION_MESSAGE,
+  messageWhenNetworkRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 
 interface DeckResponse {
   data: JsonApiResource;
@@ -31,6 +38,9 @@ export default function EditDeckPage({
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const { isOnline } = useOnlineStatus();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -92,8 +102,10 @@ export default function EditDeckPage({
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error ?? 'Failed to save changes.');
+        const data = await res.json().catch(() => ({}));
+        setError(
+          userFacingMessageForApiError(res, data, 'Failed to save changes.')
+        );
         return;
       }
 
@@ -106,15 +118,37 @@ export default function EditDeckPage({
   };
 
   async function handleDelete() {
+    setDeleteError('');
+    if (!isOnline) {
+      setDeleteError(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
     setDeleting(true);
     try {
       const res = await fetch(`/api/decks/${id}`, { method: 'DELETE' });
-      if (res.ok || res.status === 204) {
-        router.push('/dashboard/decks');
+      if (res.status === 202) {
+        const data = await res.json().catch(() => ({}));
+        if ((data as { queued?: boolean }).queued) {
+          setDeleteError(MUTATION_QUEUED_MESSAGE);
+          return;
+        }
+        setDeleteError('Unexpected response. Please try again.');
+        return;
       }
+      if (res.status === 204) {
+        setDeleteConfirm(false);
+        setDeleteError('');
+        router.push('/dashboard/decks');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(
+        userFacingMessageForApiError(res, data, 'Failed to delete deck.')
+      );
+    } catch {
+      setDeleteError(messageWhenNetworkRequestThrows());
     } finally {
       setDeleting(false);
-      setDeleteConfirm(false);
     }
   }
 
@@ -200,32 +234,45 @@ export default function EditDeckPage({
 
             <div className="border-t border-border pt-6 mt-2">
               {deleteConfirm ? (
-                <div className="flex items-center gap-3">
-                  <p className="text-sm text-muted-foreground">This will permanently delete the deck and all its cards.</p>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                  >
-                    {deleting ? 'Deleting…' : 'Confirm delete'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDeleteConfirm(false)}
-                  >
-                    Cancel
-                  </Button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      This will permanently delete the deck and all its cards.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleDelete}
+                      disabled={deleting}
+                    >
+                      {deleting ? 'Deleting…' : 'Confirm delete'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDeleteConfirm(false);
+                        setDeleteError('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  {deleteError && (
+                    <p className="text-sm text-destructive">{deleteError}</p>
+                  )}
                 </div>
               ) : (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setDeleteConfirm(true)}
+                  onClick={() => {
+                    setDeleteError('');
+                    setDeleteConfirm(true);
+                  }}
                   className="text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />

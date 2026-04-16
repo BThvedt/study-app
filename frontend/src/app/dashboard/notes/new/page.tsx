@@ -15,6 +15,7 @@ import { AreaSubjectSelector } from '@/components/area-subject-selector';
 import { LinkDecksDialog } from '@/components/link-decks-dialog';
 import { ArrowLeft, Save, Eye, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { userFacingMessageForApiError } from '@/lib/api-client-messages';
 
 type MobileTab = 'write' | 'preview';
 
@@ -70,7 +71,9 @@ export default function NewNotePage() {
       if (!res.ok) {
         try {
           const data = await res.json();
-          setError(data.error ?? 'Failed to save note.');
+          setError(
+            userFacingMessageForApiError(res, data, 'Failed to save note.')
+          );
         } catch {
           setQueued(true);
         }
@@ -146,7 +149,7 @@ export default function NewNotePage() {
             {saving ? 'Saving…' : 'Save note'}
           </Button>
         </div>
-        {error && (
+        {error && !queued && (
           <p className="px-4 pb-2 text-xs text-destructive">{error}</p>
         )}
         {queued && (

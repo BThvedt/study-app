@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AreaSubjectSelector } from '@/components/area-subject-selector';
 import { Plus } from 'lucide-react';
+import { userFacingMessageForApiError } from '@/lib/api-client-messages';
 
 interface DeckCreateDialogProps {
   onCreated: () => void;
@@ -73,7 +74,9 @@ export function DeckCreateDialog({ onCreated }: DeckCreateDialogProps) {
       if (!res.ok) {
         try {
           const data = await res.json();
-          setError(data.error ?? 'Failed to create deck.');
+          setError(
+            userFacingMessageForApiError(res, data, 'Failed to create deck.')
+          );
         } catch {
           setQueued(true);
         }
@@ -143,7 +146,9 @@ export function DeckCreateDialog({ onCreated }: DeckCreateDialogProps) {
               layout="col"
             />
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && !queued && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
             {queued && (
               <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-3 text-sm text-amber-200">
                 Deck saved offline. It will appear once you reconnect.

@@ -13,9 +13,17 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Plus, X, Brain, Play, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import {
+  MUTATION_QUEUED_MESSAGE,
+  OFFLINE_ACTION_MESSAGE,
+  messageWhenNetworkRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 import { AiGenerateDialog } from '@/components/ai-generate-dialog';
 import { LinkNotesDialog } from '@/components/link-notes-dialog';
 import { LinkRelatedDecksDialog } from '@/components/link-related-decks-dialog';
+import { UnsavedChangesGuard } from '@/components/unsaved-changes-guard';
 
 interface DeckResponse {
   data: JsonApiResource;
@@ -49,6 +57,7 @@ export default function DeckDetailPage({
   // Delete state
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // Add card form state
   const [showForm, setShowForm] = useState(false);
@@ -57,7 +66,19 @@ export default function DeckDetailPage({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const [dirtyEditCardIds, setDirtyEditCardIds] = useState<Set<string>>(new Set());
+
   const authenticated = useAuth();
+  const { isOnline } = useOnlineStatus();
+
+  const reportCardEditDirty = useCallback((cardId: string, dirty: boolean) => {
+    setDirtyEditCardIds((prev) => {
+      const next = new Set(prev);
+      if (dirty) next.add(cardId);
+      else next.delete(cardId);
+      return next;
+    });
+  }, []);
 
   const loadLinkedNotes = useCallback(async () => {
     try {
@@ -135,8 +156,10 @@ export default function DeckDetailPage({
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setFormError(data.error ?? 'Failed to save card.');
+        const data = await res.json().catch(() => ({}));
+        setFormError(
+          userFacingMessageForApiError(res, data, 'Failed to save card.')
+        );
         return;
       }
 
@@ -160,19 +183,45 @@ export default function DeckDetailPage({
   }
 
   async function handleDelete() {
+    setDeleteError('');
+    if (!isOnline) {
+      setDeleteError(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
     setDeleting(true);
     try {
       const res = await fetch(`/api/decks/${id}`, { method: 'DELETE' });
-      if (res.ok || res.status === 204) {
-        router.push('/dashboard/decks');
+      if (res.status === 202) {
+        const data = await res.json().catch(() => ({}));
+        if ((data as { queued?: boolean }).queued) {
+          setDeleteError(MUTATION_QUEUED_MESSAGE);
+          return;
+        }
+        setDeleteError('Unexpected response. Please try again.');
+        return;
       }
+      if (res.status === 204) {
+        setDeleteConfirm(false);
+        setDeleteError('');
+        router.push('/dashboard/decks');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(
+        userFacingMessageForApiError(res, data, 'Failed to delete deck.')
+      );
+    } catch {
+      setDeleteError(messageWhenNetworkRequestThrows());
     } finally {
       setDeleting(false);
-      setDeleteConfirm(false);
     }
   }
 
   if (!authenticated) return null;
+
+  const addCardFormDirty =
+    showForm && (front.trim() !== '' || back.trim() !== '');
+  const isDirty = addCardFormDirty || dirtyEditCardIds.size > 0;
 
   // Resolve area / subject names from included
   const areaRel = deck?.relationships?.field_area?.data;
@@ -190,6 +239,7 @@ export default function DeckDetailPage({
 
   return (
     <>
+      <UnsavedChangesGuard isDirty={isDirty} />
       <Header authenticated onSignIn={() => {}} onSignUp={() => {}} onLogout={handleLogout} />
 
       <main className="mx-auto max-w-4xl px-6 pt-28 pb-16">
@@ -235,19 +285,35 @@ export default function DeckDetailPage({
             {/* Right: button rows */}
             <div className="shrink-0 pl-9 sm:pl-0">
               {deleteConfirm ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground hidden sm:inline">Delete this deck?</span>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                  >
-                    {deleting ? 'Deleting…' : 'Confirm'}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)}>
-                    Cancel
-                  </Button>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground hidden sm:inline">
+                      Delete this deck?
+                    </span>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleDelete}
+                      disabled={deleting}
+                    >
+                      {deleting ? 'Deleting…' : 'Confirm'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDeleteConfirm(false);
+                        setDeleteError('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  {deleteError && (
+                    <p className="text-sm text-destructive text-right max-w-xs">
+                      {deleteError}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-start sm:items-end gap-2">
@@ -318,7 +384,10 @@ export default function DeckDetailPage({
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      onClick={() => setDeleteConfirm(true)}
+                      onClick={() => {
+                        setDeleteError('');
+                        setDeleteConfirm(true);
+                      }}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -420,12 +489,19 @@ export default function DeckDetailPage({
                     key={card.id}
                     card={card}
                     index={i}
+                    onEditDirtyChange={reportCardEditDirty}
                     onUpdated={(updated) =>
                       setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
                     }
-                    onDeleted={(cardId) =>
-                      setCards((prev) => prev.filter((c) => c.id !== cardId))
-                    }
+                    onDeleted={(cardId) => {
+                      setCards((prev) => prev.filter((c) => c.id !== cardId));
+                      setDirtyEditCardIds((prev) => {
+                        if (!prev.has(cardId)) return prev;
+                        const next = new Set(prev);
+                        next.delete(cardId);
+                        return next;
+                      });
+                    }}
                   />
                 ))}
           </div>

@@ -49,6 +49,11 @@ export async function GET(request: NextRequest) {
  * presave hook — no need to include it in the JSON:API document.
  */
 export async function POST(request: NextRequest) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const body = await request.json();
   const { type, name, areaUuid } = body as {
     type: 'area' | 'subject';

@@ -20,6 +20,12 @@ import {
 } from '@/components/ui/select';
 import { ExternalLink, Layers, Link2, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  SEARCH_HTTP_FALLBACK_MESSAGE,
+  messageWhenSearchRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 import type { JsonApiResource } from '@/lib/drupal';
 
 interface SearchDeckResult {
@@ -59,6 +65,7 @@ export function LinkRelatedDecksDialog({
   const [searchResults, setSearchResults] = useState<SearchDeckResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const [localSelected, setLocalSelected] = useState<string[]>(initialLinkedDeckIds ?? []);
   const [filterAreaId, setFilterAreaId] = useState('');
@@ -114,12 +121,14 @@ export function LinkRelatedDecksDialog({
       setSearch('');
       setSearchResults([]);
       setSearched(false);
+      setSearchError('');
       setSaveError('');
       loadLinkedDecks();
       if (decks.length === 0 && !loadingDecks) loadAllDecks();
       setTimeout(() => searchInputRef.current?.focus(), 50);
     } else {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      setSearchError('');
     }
   }
 
@@ -129,10 +138,12 @@ export function LinkRelatedDecksDialog({
       setSearchResults([]);
       setSearchLoading(false);
       setSearched(false);
+      setSearchError('');
       return;
     }
     setSearchLoading(true);
     debounceRef.current = setTimeout(async () => {
+      setSearchError('');
       try {
         const params = new URLSearchParams({ q: q.trim(), type: 'deck' });
         const res = await fetch(`/api/search?${params}`);
@@ -143,7 +154,16 @@ export function LinkRelatedDecksDialog({
               (r: SearchDeckResult) => r.type === 'flashcard_deck' && r.uuid !== deckId
             )
           );
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setSearchResults([]);
+          setSearchError(
+            userFacingMessageForApiError(res, data, SEARCH_HTTP_FALLBACK_MESSAGE)
+          );
         }
+      } catch {
+        setSearchResults([]);
+        setSearchError(messageWhenSearchRequestThrows());
       } finally {
         setSearchLoading(false);
         setSearched(true);
@@ -260,7 +280,14 @@ export function LinkRelatedDecksDialog({
         body: JSON.stringify({ add, remove }),
       });
       if (!res.ok) {
-        setSaveError('Failed to update links. Please try again.');
+        const data = await res.json().catch(() => ({}));
+        setSaveError(
+          userFacingMessageForApiError(
+            res,
+            data,
+            'Failed to update links. Please try again.',
+          ),
+        );
         return;
       }
       onLinksChanged?.();
@@ -428,6 +455,17 @@ export function LinkRelatedDecksDialog({
                 </div>
               ) : !searched ? (
                 <p className="py-12 text-center text-sm text-muted-foreground">Searching…</p>
+              ) : searchError ? (
+                <p
+                  className={cn(
+                    'py-12 px-4 text-center text-sm',
+                    searchError === SESSION_EXPIRED_MESSAGE
+                      ? 'text-destructive'
+                      : 'text-muted-foreground',
+                  )}
+                >
+                  {searchError}
+                </p>
               ) : searchResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground gap-2">
                   <Layers className="h-5 w-5 opacity-40" />

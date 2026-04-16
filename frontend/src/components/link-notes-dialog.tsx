@@ -21,6 +21,12 @@ import {
 } from '@/components/ui/select';
 import { ExternalLink, FileText, Link2, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  SEARCH_HTTP_FALLBACK_MESSAGE,
+  messageWhenSearchRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 import type { JsonApiResource } from '@/lib/drupal';
 
 interface SearchNoteResult {
@@ -63,6 +69,7 @@ export function LinkNotesDialog({
   const [searchResults, setSearchResults] = useState<SearchNoteResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const [localSelected, setLocalSelected] = useState<string[]>(initialLinkedNoteIds ?? []);
   const [filterAreaId, setFilterAreaId] = useState('');
@@ -118,6 +125,7 @@ export function LinkNotesDialog({
       setSearch('');
       setSearchResults([]);
       setSearched(false);
+      setSearchError('');
       setSaveError('');
       loadLinkedNotes();
       if (notes.length === 0 && !loadingNotes) {
@@ -126,6 +134,7 @@ export function LinkNotesDialog({
       setTimeout(() => searchInputRef.current?.focus(), 50);
     } else {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      setSearchError('');
     }
   }
 
@@ -135,10 +144,12 @@ export function LinkNotesDialog({
       setSearchResults([]);
       setSearchLoading(false);
       setSearched(false);
+      setSearchError('');
       return;
     }
     setSearchLoading(true);
     debounceRef.current = setTimeout(async () => {
+      setSearchError('');
       try {
         const params = new URLSearchParams({ q: q.trim(), type: 'note' });
         const res = await fetch(`/api/search?${params}`);
@@ -147,7 +158,16 @@ export function LinkNotesDialog({
           setSearchResults(
             (data.results ?? []).filter((r: SearchNoteResult) => r.type === 'study_note')
           );
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setSearchResults([]);
+          setSearchError(
+            userFacingMessageForApiError(res, data, SEARCH_HTTP_FALLBACK_MESSAGE)
+          );
         }
+      } catch {
+        setSearchResults([]);
+        setSearchError(messageWhenSearchRequestThrows());
       } finally {
         setSearchLoading(false);
         setSearched(true);
@@ -262,7 +282,14 @@ export function LinkNotesDialog({
         body: JSON.stringify({ add, remove }),
       });
       if (!res.ok) {
-        setSaveError('Failed to update links. Please try again.');
+        const data = await res.json().catch(() => ({}));
+        setSaveError(
+          userFacingMessageForApiError(
+            res,
+            data,
+            'Failed to update links. Please try again.',
+          ),
+        );
         return;
       }
       onLinksChanged?.();
@@ -430,6 +457,17 @@ export function LinkNotesDialog({
                 </div>
               ) : !searched ? (
                 <p className="py-12 text-center text-sm text-muted-foreground">Searching…</p>
+              ) : searchError ? (
+                <p
+                  className={cn(
+                    'py-12 px-4 text-center text-sm',
+                    searchError === SESSION_EXPIRED_MESSAGE
+                      ? 'text-destructive'
+                      : 'text-muted-foreground',
+                  )}
+                >
+                  {searchError}
+                </p>
               ) : searchResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground gap-2">
                   <FileText className="h-5 w-5 opacity-40" />

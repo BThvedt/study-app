@@ -24,6 +24,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  }
+
   const body = await request.json();
 
   const relationships: Record<string, unknown> = {};

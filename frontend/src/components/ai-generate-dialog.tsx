@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Sparkles, Loader2, ChevronLeft, WifiOff } from 'lucide-react';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { cn } from '@/lib/utils';
+import { userFacingMessageForApiError } from '@/lib/api-client-messages';
 
 interface Candidate {
   front: string;
@@ -80,9 +81,15 @@ export function AiGenerateDialog({ deckId, onSaved, existingCards = [] }: AiGene
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim(), limit: isAuto ? 10 : limitValue, existingCards }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setGenError(data.error ?? 'Generation failed. Please try again.');
+        setGenError(
+          userFacingMessageForApiError(
+            res,
+            data,
+            'Generation failed. Please try again.'
+          )
+        );
         return;
       }
       const raw: Candidate[] = data.candidates ?? [];
@@ -128,8 +135,14 @@ export function AiGenerateDialog({ deckId, onSaved, existingCards = [] }: AiGene
           body: JSON.stringify({ front: card.front.trim(), back: card.back.trim() }),
         });
         if (!res.ok) {
-          const data = await res.json();
-          setSaveError(data.error ?? 'Failed to save one or more cards.');
+          const data = await res.json().catch(() => ({}));
+          setSaveError(
+            userFacingMessageForApiError(
+              res,
+              data,
+              'Failed to save one or more cards.'
+            )
+          );
           return;
         }
       }

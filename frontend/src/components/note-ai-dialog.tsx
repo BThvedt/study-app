@@ -25,6 +25,11 @@ import {
 } from 'lucide-react';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { cn } from '@/lib/utils';
+import {
+  OFFLINE_ACTION_MESSAGE,
+  messageWhenNetworkRequestThrows,
+  userFacingMessageForApiError,
+} from '@/lib/api-client-messages';
 
 type Step =
   | 'menu'
@@ -111,6 +116,10 @@ export function NoteAiDialog({
   // ── Format ────────────────────────────────────────────────────────────────
 
   async function handleFormat() {
+    if (!isOnline) {
+      setError(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
     if (!noteBody.trim()) {
       setError('The note has no content to format.');
       return;
@@ -123,12 +132,15 @@ export function NoteAiDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'format', noteBody }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Format failed.'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(userFacingMessageForApiError(res, data, 'Format failed.'));
+        return;
+      }
       setFormattedBody(data.result ?? '');
       setStep('confirm-format');
     } catch {
-      setError('An unexpected error occurred.');
+      setError(messageWhenNetworkRequestThrows());
     } finally {
       setLoading(false);
     }
@@ -143,6 +155,10 @@ export function NoteAiDialog({
   // ── Add content ───────────────────────────────────────────────────────────
 
   async function handleAddContent() {
+    if (!isOnline) {
+      setError(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
     if (!addPrompt.trim()) { setError('Please describe what you would like to add.'); return; }
     setLoading(true);
     setError('');
@@ -152,12 +168,15 @@ export function NoteAiDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'add-content', noteBody, prompt: addPrompt }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Generation failed.'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(userFacingMessageForApiError(res, data, 'Generation failed.'));
+        return;
+      }
       setAddedBody(data.result ?? '');
       setStep('confirm-add');
     } catch {
-      setError('An unexpected error occurred.');
+      setError(messageWhenNetworkRequestThrows());
     } finally {
       setLoading(false);
     }
@@ -172,6 +191,10 @@ export function NoteAiDialog({
   // ── Generate deck ─────────────────────────────────────────────────────────
 
   async function handleGenerateDeck() {
+    if (!isOnline) {
+      setError(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
     if (!noteBody.trim()) {
       setError('The note has no content to generate cards from.');
       return;
@@ -185,14 +208,17 @@ export function NoteAiDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'generate-deck', noteBody, limit: generateIsAuto ? 10 : generateLimitValue }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Generation failed.'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(userFacingMessageForApiError(res, data, 'Generation failed.'));
+        return;
+      }
       const raw: { front: string; back: string }[] = data.candidates ?? [];
       if (raw.length === 0) { setError('No cards could be generated from this note.'); return; }
       setCandidates(raw.map((c) => ({ ...c, selected: true })));
       setStep('deck-review');
     } catch {
-      setError('An unexpected error occurred.');
+      setError(messageWhenNetworkRequestThrows());
     } finally {
       setLoading(false);
     }
@@ -217,6 +243,11 @@ export function NoteAiDialog({
     if (toSave.length === 0) { setSaveError('Select at least one card to save.'); return; }
     if (!deckTitle.trim()) { setSaveError('Please enter a deck title.'); return; }
 
+    if (!isOnline) {
+      setSaveError(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
+
     setSaving(true);
     setSaveError('');
     try {
@@ -230,12 +261,14 @@ export function NoteAiDialog({
           ...(noteSubjectUuid ? { subjectUuid: noteSubjectUuid } : {}),
         }),
       });
+      const deckBody = await deckRes.json().catch(() => ({}));
       if (!deckRes.ok) {
-        const d = await deckRes.json();
-        setSaveError(d.error ?? 'Failed to create deck.');
+        setSaveError(
+          userFacingMessageForApiError(deckRes, deckBody, 'Failed to create deck.')
+        );
         return;
       }
-      const deckData = await deckRes.json();
+      const deckData = deckBody as { data: { id: string } };
       const newDeckId: string = deckData.data.id;
 
       // 2. Save cards sequentially
@@ -245,9 +278,15 @@ export function NoteAiDialog({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ front: card.front.trim(), back: card.back.trim() }),
         });
+        const cardBody = await cardRes.json().catch(() => ({}));
         if (!cardRes.ok) {
-          const d = await cardRes.json();
-          setSaveError(d.error ?? 'Failed to save one or more cards.');
+          setSaveError(
+            userFacingMessageForApiError(
+              cardRes,
+              cardBody,
+              'Failed to save one or more cards.'
+            )
+          );
           return;
         }
       }
@@ -255,18 +294,29 @@ export function NoteAiDialog({
       // 3. Auto-link the deck to the note
       if (autoLink) {
         const updatedIds = [...new Set([...linkedDeckIds, newDeckId])];
-        await fetch(`/api/notes/${noteId}`, {
+        const linkRes = await fetch(`/api/notes/${noteId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ linkedDeckUuids: updatedIds }),
         });
+        const linkBody = await linkRes.json().catch(() => ({}));
+        if (!linkRes.ok) {
+          setSaveError(
+            userFacingMessageForApiError(
+              linkRes,
+              linkBody,
+              'Deck was created but could not be linked to this note.'
+            )
+          );
+          return;
+        }
         onLinksChange(updatedIds);
       }
 
       setOpen(false);
       reset();
     } catch {
-      setSaveError('An unexpected error occurred.');
+      setSaveError(messageWhenNetworkRequestThrows());
     } finally {
       setSaving(false);
     }
@@ -277,13 +327,15 @@ export function NoteAiDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
-        disabled={!isOnline}
         render={
           <Button
             variant="outline"
             size="sm"
-            disabled={!isOnline}
-            title={isOnline ? undefined : "AI features require an internet connection"}
+            title={
+              isOnline
+                ? undefined
+                : 'You can open AI Actions, but running them needs a connection and a signed-in session.'
+            }
           >
             {isOnline ? <Sparkles className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
             AI
@@ -302,6 +354,12 @@ export function NoteAiDialog({
                 AI Actions
               </DialogTitle>
             </DialogHeader>
+
+            {!isOnline && (
+              <p className="text-sm text-muted-foreground rounded-lg border border-border bg-muted/40 px-3 py-2">
+                {OFFLINE_ACTION_MESSAGE}
+              </p>
+            )}
 
             <div className="flex flex-col gap-2">
               <button

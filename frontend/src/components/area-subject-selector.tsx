@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/command';
 import { ChevronsUpDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ApiUnauthorizedError } from '@/lib/api-client-messages';
 
 interface TaxonomyTerm {
   id: string;
@@ -94,10 +95,15 @@ function TaxonomyCombobox({
         setCreateError(msg);
         onError?.(msg);
       }
-    } catch {
-      const msg = 'You appear to be offline. Please try again later.';
-      setCreateError(msg);
-      onError?.(msg);
+    } catch (e) {
+      if (e instanceof ApiUnauthorizedError) {
+        setCreateError(e.message);
+        onError?.(e.message);
+      } else {
+        const msg = 'You appear to be offline. Please try again later.';
+        setCreateError(msg);
+        onError?.(msg);
+      }
     } finally {
       setCreating(false);
     }
@@ -237,8 +243,11 @@ export function AreaSubjectSelector({
         setTimeout(() => reject(new Error('timeout')), 5000),
       ),
     ]);
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401) throw new ApiUnauthorizedError();
+      return null;
+    }
     if (data.queued) return null;
     const newTerm: TaxonomyTerm = { id: data.data.id, attributes: { name } };
     setAreas((prev) =>
@@ -261,8 +270,11 @@ export function AreaSubjectSelector({
         setTimeout(() => reject(new Error('timeout')), 5000),
       ),
     ]);
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401) throw new ApiUnauthorizedError();
+      return null;
+    }
     if (data.queued) return null;
     const newTerm: TaxonomyTerm = { id: data.data.id, attributes: { name } };
     setSubjects((prev) =>
