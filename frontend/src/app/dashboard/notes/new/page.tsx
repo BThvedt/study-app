@@ -1,5 +1,7 @@
 'use client';
 
+// Autosave (every 5 min when dirty) runs only on the edit page after the note exists — not here before the first save.
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,6 +12,7 @@ import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { AreaSubjectSelector } from '@/components/area-subject-selector';
 import { LinkDecksDialog } from '@/components/link-decks-dialog';
@@ -97,6 +100,13 @@ export default function NewNotePage() {
 
   if (!authenticated) return null;
 
+  const isDirty =
+    title.trim() !== '' ||
+    body.trim() !== '' ||
+    areaUuid !== '' ||
+    subjectUuid !== '' ||
+    linkedDeckIds.length > 0;
+
   return (
     <>
       <Header authenticated onSignIn={() => {}} onSignUp={() => {}} onLogout={handleLogout} />
@@ -144,7 +154,7 @@ export default function NewNotePage() {
             </button>
           </div>
 
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Button size="sm" onClick={handleSave} disabled={saving || !isDirty}>
             <Save className="h-4 w-4" />
             {saving ? 'Saving…' : 'Save note'}
           </Button>
@@ -160,15 +170,15 @@ export default function NewNotePage() {
       </div>
 
       {/* Editor area — starts below both header (64px) and top bar (56px) */}
-      <div className="flex flex-col" style={{ paddingTop: '120px', height: '100dvh' }}>
+      <div className="flex min-h-0 flex-col" style={{ paddingTop: '120px', height: '100dvh' }}>
 
         {/* Split pane (desktop) / single pane (mobile) */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
 
           {/* Write pane */}
           <div
             className={cn(
-              'flex flex-col overflow-hidden',
+              'flex min-h-0 flex-col overflow-hidden',
               // Desktop: always half width
               'md:w-1/2 md:flex md:border-r md:border-border',
               // Mobile: show only when write tab active
@@ -179,17 +189,15 @@ export default function NewNotePage() {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Write your notes in Markdown…"
-              className="flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed focus-visible:ring-0 p-4 h-full"
+              className="flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed focus-visible:ring-0 p-4 h-full [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
             />
           </div>
 
           {/* Preview pane */}
-          <div
+          <ScrollArea
             className={cn(
-              'overflow-y-auto',
-              // Desktop: always half width
+              'min-h-0 flex-1',
               'md:w-1/2 md:flex md:flex-col',
-              // Mobile: show only when preview tab active
               mobileTab === 'preview' ? 'flex w-full flex-col' : 'hidden'
             )}
           >
@@ -198,11 +206,11 @@ export default function NewNotePage() {
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
               </div>
             ) : (
-              <div className="flex flex-1 items-center justify-center p-8 text-muted-foreground text-sm">
+              <div className="flex min-h-[12rem] flex-1 items-center justify-center p-8 text-muted-foreground text-sm md:min-h-0">
                 Preview will appear here as you write.
               </div>
             )}
-          </div>
+          </ScrollArea>
         </div>
 
         {/* Bottom metadata bar */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, use } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
@@ -24,6 +24,8 @@ import { AiGenerateDialog } from '@/components/ai-generate-dialog';
 import { LinkNotesDialog } from '@/components/link-notes-dialog';
 import { LinkRelatedDecksDialog } from '@/components/link-related-decks-dialog';
 import { UnsavedChangesGuard } from '@/components/unsaved-changes-guard';
+
+const ADD_CARD_BOTH_REQUIRED_MSG = 'Both front and back are required.';
 
 interface DeckResponse {
   data: JsonApiResource;
@@ -65,6 +67,10 @@ export default function DeckDetailPage({
   const [back, setBack] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  /** Which add-card textarea is focused — used to hide validation while typing in an empty field. */
+  const [addCardFocusedField, setAddCardFocusedField] = useState<
+    'front' | 'back' | null
+  >(null);
 
   const [dirtyEditCardIds, setDirtyEditCardIds] = useState<Set<string>>(new Set());
 
@@ -142,7 +148,7 @@ export default function DeckDetailPage({
   async function handleAddCard(e: React.FormEvent) {
     e.preventDefault();
     if (!front.trim() || !back.trim()) {
-      setFormError('Both front and back are required.');
+      setFormError(ADD_CARD_BOTH_REQUIRED_MSG);
       return;
     }
     setSaving(true);
@@ -167,6 +173,7 @@ export default function DeckDetailPage({
       setCards((prev) => [created.data, ...prev]);
       setFront('');
       setBack('');
+      setAddCardFocusedField(null);
       setShowForm(false);
     } catch {
       setFormError('An unexpected error occurred.');
@@ -180,7 +187,48 @@ export default function DeckDetailPage({
     setFront('');
     setBack('');
     setFormError('');
+    setAddCardFocusedField(null);
   }
+
+  function handleAddCardFieldBlur() {
+    if (!front.trim() || !back.trim()) {
+      setFormError(ADD_CARD_BOTH_REQUIRED_MSG);
+    } else {
+      setFormError((prev) =>
+        prev === ADD_CARD_BOTH_REQUIRED_MSG ? '' : prev
+      );
+    }
+  }
+
+  function handleAddCardFrontBlur(e: React.FocusEvent<HTMLTextAreaElement>) {
+    const next = e.relatedTarget as HTMLElement | null;
+    if (next?.id === 'card-back') {
+      setAddCardFocusedField('back');
+      return;
+    }
+    setAddCardFocusedField(null);
+    handleAddCardFieldBlur();
+  }
+
+  function handleAddCardBackBlur(e: React.FocusEvent<HTMLTextAreaElement>) {
+    const next = e.relatedTarget as HTMLElement | null;
+    if (next?.id === 'card-front') {
+      setAddCardFocusedField('front');
+      return;
+    }
+    setAddCardFocusedField(null);
+    handleAddCardFieldBlur();
+  }
+
+  useLayoutEffect(() => {
+    if (
+      formError === ADD_CARD_BOTH_REQUIRED_MSG &&
+      front.trim() &&
+      back.trim()
+    ) {
+      setFormError('');
+    }
+  }, [front, back, formError]);
 
   async function handleDelete() {
     setDeleteError('');
@@ -222,6 +270,17 @@ export default function DeckDetailPage({
   const addCardFormDirty =
     showForm && (front.trim() !== '' || back.trim() !== '');
   const isDirty = addCardFormDirty || dirtyEditCardIds.size > 0;
+
+  /**
+   * Show add-card form error line. Validation message is hidden while focus is in a field OR
+   * when both sides are non-empty (avoids one-frame flash before formError state clears).
+   */
+  const showAddCardFormError =
+    Boolean(formError) &&
+    (formError !== ADD_CARD_BOTH_REQUIRED_MSG ||
+      Boolean(
+        (!front.trim() || !back.trim()) && addCardFocusedField === null
+      ));
 
   // Resolve area / subject names from included
   const areaRel = deck?.relationships?.field_area?.data;
@@ -420,6 +479,8 @@ export default function DeckDetailPage({
                   id="card-front"
                   value={front}
                   onChange={(e) => setFront(e.target.value)}
+                  onFocus={() => setAddCardFocusedField('front')}
+                  onBlur={handleAddCardFrontBlur}
                   placeholder="What is…?"
                   rows={4}
                   className="resize-none"
@@ -431,6 +492,8 @@ export default function DeckDetailPage({
                   id="card-back"
                   value={back}
                   onChange={(e) => setBack(e.target.value)}
+                  onFocus={() => setAddCardFocusedField('back')}
+                  onBlur={handleAddCardBackBlur}
                   placeholder="It is…"
                   rows={4}
                   className="resize-none"
@@ -438,10 +501,16 @@ export default function DeckDetailPage({
               </div>
             </div>
 
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
+            {showAddCardFormError && (
+              <p className="text-sm text-destructive">{formError}</p>
+            )}
 
             <div className="flex items-center gap-2">
-              <Button type="submit" size="sm" disabled={saving}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={saving || !front.trim() || !back.trim()}
+              >
                 {saving ? 'Saving…' : 'Save card'}
               </Button>
               <Button

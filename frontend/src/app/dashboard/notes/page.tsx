@@ -16,6 +16,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { FileText, ArrowLeft, Plus, Pencil, Layers, ChevronLeft, X } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
 
@@ -200,12 +201,12 @@ function NotesPageContent() {
     <>
       <Header authenticated onSignIn={() => {}} onSignUp={() => {}} onLogout={handleLogout} />
 
-      <div className="fixed inset-x-0 bottom-0 top-16 flex">
+      <div className="fixed inset-x-0 bottom-0 top-16 flex min-h-0">
 
         {/* ── Sidebar ─────────────────────────────────────────────────────── */}
         <aside
           className={cn(
-            'flex flex-col border-r border-border bg-background shrink-0',
+            'flex min-h-0 flex-col border-r border-border bg-background shrink-0',
             'w-full md:w-72 lg:w-80',
             mobileShowReader ? 'hidden md:flex' : 'flex'
           )}
@@ -298,7 +299,7 @@ function NotesPageContent() {
           )}
 
           {/* Note list */}
-          <div className="flex-1 overflow-y-auto">
+          <ScrollArea className="flex-1 min-h-0">
             {loading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="px-4 py-3 border-b border-border">
@@ -397,17 +398,18 @@ function NotesPageContent() {
                 );
               })
             )}
-          </div>
+          </ScrollArea>
         </aside>
 
         {/* ── Reader ──────────────────────────────────────────────────────── */}
         <main
           className={cn(
-            'flex-1 overflow-y-auto bg-background',
-            mobileShowReader ? 'flex flex-col' : 'hidden md:flex md:flex-col'
+            'flex min-h-0 flex-1 flex-col bg-background',
+            mobileShowReader ? 'flex' : 'hidden md:flex'
           )}
         >
           {selectedNote ? (
+            <ScrollArea className="flex-1 min-h-0">
             <div className="max-w-3xl mx-auto w-full px-6 py-8">
 
               {/* Reader header */}
@@ -501,6 +503,7 @@ function NotesPageContent() {
                 </section>
               )}
             </div>
+            </ScrollArea>
           ) : (
             /* Empty state — only visible on desktop when nothing is selected */
             <div className="hidden md:flex flex-col flex-1 items-center justify-center text-center p-8">

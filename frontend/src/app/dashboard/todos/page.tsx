@@ -38,6 +38,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
 import {
@@ -830,7 +831,7 @@ function TodosPageContent() {
         {/* ── Sidebar ─────────────────────────────────────────────────────── */}
         <aside
           className={cn(
-            'flex flex-col border-r border-border bg-background shrink-0',
+            'flex min-h-0 flex-col border-r border-border bg-background shrink-0',
             'w-full md:w-72 lg:w-80',
             mobileShowDetail ? 'hidden md:flex' : 'flex'
           )}
@@ -919,7 +920,7 @@ function TodosPageContent() {
           )}
 
           {/* List of lists */}
-          <div className="flex-1 overflow-y-auto">
+          <ScrollArea className="flex-1 min-h-0">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="px-4 py-3 border-b border-border">
@@ -1018,17 +1019,18 @@ function TodosPageContent() {
                 );
               })
             )}
-          </div>
+          </ScrollArea>
         </aside>
 
         {/* ── Detail panel ────────────────────────────────────────────────── */}
         <main
           className={cn(
-            'flex-1 overflow-y-auto bg-background',
-            mobileShowDetail ? 'flex flex-col' : 'hidden md:flex md:flex-col'
+            'flex min-h-0 flex-1 flex-col bg-background',
+            mobileShowDetail ? 'flex' : 'hidden md:flex'
           )}
         >
           {selectedList ? (
+            <ScrollArea className="flex-1 min-h-0">
             <div className="max-w-[60rem] mx-auto w-full px-10 py-8">
 
               {/* Detail header */}
@@ -1205,7 +1207,7 @@ function TodosPageContent() {
                               onBlur={() => saveNotes(item.id)}
                               placeholder="Add notes…"
                               rows={3}
-                              className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                              className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
                             />
                           </div>
                         )}
@@ -1254,7 +1256,7 @@ function TodosPageContent() {
                     placeholder="Add notes…"
                     rows={3}
                     autoFocus
-                    className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
                   />
                 )}
                 {addItemError && (
@@ -1262,6 +1264,7 @@ function TodosPageContent() {
                 )}
               </form>
             </div>
+            </ScrollArea>
           ) : (
             <div className="hidden md:flex flex-col flex-1 items-center justify-center text-center p-8">
               <CheckSquare className="h-10 w-10 text-muted-foreground/25 mb-3" />

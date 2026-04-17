@@ -1,0 +1,10 @@
+---
+description: Do not run production builds while implementing unless the user explicitly asks
+alwaysApply: true
+---
+
+# Development workflow
+
+- Do **not** run `npm run build`, `next build`, or other **production** build commands to verify changes while implementing or refactoring, unless the **user explicitly asks** for a build.
+- Prefer the IDE and quick checks (e.g. `npx tsc --noEmit` in `frontend/` when type safety is in doubt) only when needed; do not treat a full build as a default step after edits.
+- If you believe a build is necessary, **ask the user** before running it.

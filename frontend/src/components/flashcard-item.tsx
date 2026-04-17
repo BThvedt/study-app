@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import {
   MUTATION_QUEUED_MESSAGE,
@@ -39,6 +39,72 @@ export function FlashcardItem({
   const front = card.attributes.field_front as string;
   const back = card.attributes.field_back as string;
 
+  const draftRef = useRef({
+    editFront: '',
+    editBack: '',
+    front: '',
+    back: '',
+    editing: false,
+    saving: false,
+  });
+  draftRef.current = {
+    editFront,
+    editBack,
+    front: front ?? '',
+    back: back ?? '',
+    editing,
+    saving,
+  };
+
+  const persistEdit = useCallback(
+    async (opts: { closeAfter: boolean; requireDirty: boolean }) => {
+      const d = draftRef.current;
+      if (!d.editing || d.saving) return;
+
+      const tFront = d.editFront.trim();
+      const tBack = d.editBack.trim();
+      if (!tFront || !tBack) return;
+
+      const dirty =
+        tFront !== (d.front ?? '').trim() || tBack !== (d.back ?? '').trim();
+      if (opts.requireDirty && !dirty) return;
+
+      setSaving(true);
+      setMutationError('');
+      try {
+        const res = await fetch(`/api/cards/${card.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ front: tFront, back: tBack }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          onUpdated?.(data.data);
+          if (opts.closeAfter) setEditing(false);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setMutationError(
+            userFacingMessageForApiError(res, data, 'Failed to save card.')
+          );
+        }
+      } finally {
+        setSaving(false);
+      }
+    },
+    [card.id, onUpdated],
+  );
+
+  const persistEditRef = useRef(persistEdit);
+  persistEditRef.current = persistEdit;
+
+  useEffect(() => {
+    if (!editing) return;
+    const id = window.setInterval(() => {
+      void persistEditRef.current({ closeAfter: false, requireDirty: true });
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [editing]);
+
   function startEditing(e: React.MouseEvent) {
     e.stopPropagation();
     setEditFront(front);
@@ -70,31 +136,10 @@ export function FlashcardItem({
     onEditDirtyChange(id, dirty);
   }, [editing, editFront, editBack, front, back, card.id, onEditDirtyChange]);
 
-  async function saveEdit(e: React.MouseEvent | React.FormEvent) {
+  function saveEdit(e: React.MouseEvent | React.FormEvent) {
     e.stopPropagation();
     e.preventDefault();
-    if (!editFront.trim() || !editBack.trim()) return;
-    setSaving(true);
-    setMutationError('');
-    try {
-      const res = await fetch(`/api/cards/${card.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ front: editFront.trim(), back: editBack.trim() }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        onUpdated?.(data.data);
-        setEditing(false);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setMutationError(
-          userFacingMessageForApiError(res, data, 'Failed to save card.')
-        );
-      }
-    } finally {
-      setSaving(false);
-    }
+    void persistEdit({ closeAfter: true, requireDirty: false });
   }
 
   async function handleDelete(e: React.MouseEvent) {
@@ -134,6 +179,10 @@ export function FlashcardItem({
   }
 
   if (editing) {
+    const cardDirty =
+      editFront.trim() !== (front ?? '').trim() ||
+      editBack.trim() !== (back ?? '').trim();
+
     return (
       <div className="rounded-xl border border-ring bg-card p-5 flex flex-col gap-3">
         <div className="flex items-center justify-between">
@@ -163,6 +212,10 @@ export function FlashcardItem({
           />
         </div>
 
+        {(!editFront.trim() || !editBack.trim()) && (
+          <p className="text-sm text-destructive">Both front and back are required.</p>
+        )}
+
         {mutationError && (
           <p className="text-xs text-destructive">{mutationError}</p>
         )}
@@ -170,7 +223,9 @@ export function FlashcardItem({
         <div className="flex items-center gap-2 pt-1">
           <button
             onClick={saveEdit}
-            disabled={saving || !editFront.trim() || !editBack.trim()}
+            disabled={
+              saving || !editFront.trim() || !editBack.trim() || !cardDirty
+            }
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             <Check className="h-3 w-3" />

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
@@ -10,6 +10,7 @@ import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { AreaSubjectSelector } from '@/components/area-subject-selector';
 import { LinkDecksDialog } from '@/components/link-decks-dialog';
@@ -80,6 +81,18 @@ export default function EditNotePage({
   const authenticated = useAuth();
   const { isOnline } = useOnlineStatus();
 
+  const draftRef = useRef({
+    title: '',
+    body: '',
+    areaUuid: '',
+    subjectUuid: '',
+    linkedDeckIds: [] as string[],
+    linkedNoteIds: [] as string[],
+    savedSnapshot: null as NoteSnapshot | null,
+    loading: true,
+    saving: false,
+  });
+
   useEffect(() => {
     if (!authenticated) return;
     setLoading(true);
@@ -123,55 +136,98 @@ export default function EditNotePage({
     router.replace('/');
   }
 
-  async function handleSave() {
-    if (!title.trim()) {
-      setSaveError('Title is required.');
-      return;
-    }
-    setSaving(true);
-    setSaveError('');
-    setQueued(false);
-    try {
-      const res = await Promise.race([
-        fetch(`/api/notes/${noteid}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: title.trim(),
-            fieldBody: body,
-            areaUuid: areaUuid || null,
-            subjectUuid: subjectUuid || null,
-            linkedDeckUuids: linkedDeckIds,
-            linkedNoteUuids: linkedNoteIds,
-          }),
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 8000),
-        ),
-      ]);
-      if (!res.ok) {
-        try {
-          const data = await res.json();
-          setSaveError(
-            userFacingMessageForApiError(res, data, 'Failed to save note.')
-          );
-        } catch {
-          setQueued(true);
+  const saveNote = useCallback(
+    async (opts: { navigateOnSuccess: boolean; onlyIfDirty?: boolean }) => {
+      const d = draftRef.current;
+      if (d.loading || !d.savedSnapshot) return;
+      if (d.saving) return;
+
+      const dirty =
+        d.title !== d.savedSnapshot.title ||
+        d.body !== d.savedSnapshot.body ||
+        d.areaUuid !== d.savedSnapshot.areaUuid ||
+        d.subjectUuid !== d.savedSnapshot.subjectUuid ||
+        !linkedIdsEqual(d.linkedDeckIds, d.savedSnapshot.linkedDeckIds) ||
+        !linkedIdsEqual(d.linkedNoteIds, d.savedSnapshot.linkedNoteIds);
+
+      if (opts.onlyIfDirty && !dirty) return;
+
+      const trimmed = d.title.trim();
+      if (!trimmed) {
+        if (opts.navigateOnSuccess) {
+          setSaveError('Title is required.');
         }
         return;
       }
-      const data = await res.json();
-      if (data.queued) {
+
+      setSaving(true);
+      setSaveError('');
+      setQueued(false);
+      try {
+        const res = await Promise.race([
+          fetch(`/api/notes/${noteid}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: trimmed,
+              fieldBody: d.body,
+              areaUuid: d.areaUuid || null,
+              subjectUuid: d.subjectUuid || null,
+              linkedDeckUuids: d.linkedDeckIds,
+              linkedNoteUuids: d.linkedNoteIds,
+            }),
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 8000),
+          ),
+        ]);
+        if (!res.ok) {
+          try {
+            const data = await res.json();
+            setSaveError(
+              userFacingMessageForApiError(res, data, 'Failed to save note.')
+            );
+          } catch {
+            setQueued(true);
+          }
+          return;
+        }
+        const data = await res.json();
+        if (data.queued) {
+          setQueued(true);
+          return;
+        }
+
+        const nextSnapshot: NoteSnapshot = {
+          title: trimmed,
+          body: d.body,
+          areaUuid: d.areaUuid,
+          subjectUuid: d.subjectUuid,
+          linkedDeckIds: [...d.linkedDeckIds],
+          linkedNoteIds: [...d.linkedNoteIds],
+        };
+        setSavedSnapshot(nextSnapshot);
+        setTitle(trimmed);
+
+        if (opts.navigateOnSuccess) {
+          router.push(`/dashboard/notes?id=${noteid}`);
+        }
+      } catch {
         setQueued(true);
-        return;
+      } finally {
+        setSaving(false);
       }
-      router.push(`/dashboard/notes?id=${noteid}`);
-    } catch {
-      setQueued(true);
-    } finally {
-      setSaving(false);
-    }
-  }
+    },
+    [noteid, router],
+  );
+
+  useEffect(() => {
+    if (!authenticated || loading) return;
+    const id = window.setInterval(() => {
+      void saveNote({ navigateOnSuccess: false, onlyIfDirty: true });
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [authenticated, loading, saveNote]);
 
   async function handleDelete() {
     setDeleteError('');
@@ -207,6 +263,18 @@ export default function EditNotePage({
       setDeleting(false);
     }
   }
+
+  draftRef.current = {
+    title,
+    body,
+    areaUuid,
+    subjectUuid,
+    linkedDeckIds,
+    linkedNoteIds,
+    savedSnapshot,
+    loading,
+    saving,
+  };
 
   if (!authenticated) return null;
 
@@ -309,7 +377,11 @@ export default function EditNotePage({
                 <Trash2 className="h-4 w-4" />
                 <span className="sr-only">Delete note</span>
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={saving || loading}>
+              <Button
+                size="sm"
+                onClick={() => void saveNote({ navigateOnSuccess: true })}
+                disabled={saving || loading || !isDirty}
+              >
                 <Save className="h-4 w-4" />
                 {saving ? 'Saving…' : 'Save'}
               </Button>
@@ -397,12 +469,12 @@ export default function EditNotePage({
       </div>
 
       {/* Editor area — pt-[210px] on mobile (3 rows), md:pt-[168px] on desktop (2 rows) */}
-      <div className="flex flex-col pt-[210px] md:pt-[168px]" style={{ height: '100dvh' }}>
-        <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-col pt-[210px] md:pt-[168px]" style={{ height: '100dvh' }}>
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           {/* Write pane */}
           <div
             className={cn(
-              'flex flex-col overflow-hidden',
+              'flex min-h-0 flex-col overflow-hidden',
               'md:w-1/2 md:flex md:border-r md:border-border',
               mobileTab === 'write' ? 'flex w-full' : 'hidden'
             )}
@@ -411,15 +483,15 @@ export default function EditNotePage({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Write your notes in Markdown…"
-              className="flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed focus-visible:ring-0 p-4 h-full"
+              className="flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-sm leading-relaxed focus-visible:ring-0 p-4 h-full [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
               disabled={loading}
             />
           </div>
 
           {/* Preview pane */}
-          <div
+          <ScrollArea
             className={cn(
-              'overflow-y-auto',
+              'min-h-0 flex-1',
               'md:w-1/2 md:flex md:flex-col',
               mobileTab === 'preview' ? 'flex w-full flex-col' : 'hidden'
             )}
@@ -429,11 +501,11 @@ export default function EditNotePage({
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
               </div>
             ) : (
-              <div className="flex flex-1 items-center justify-center p-8 text-muted-foreground text-sm">
+              <div className="flex min-h-[12rem] flex-1 items-center justify-center p-8 text-muted-foreground text-sm md:min-h-0">
                 Preview will appear here as you write.
               </div>
             )}
-          </div>
+          </ScrollArea>
         </div>
       </div>
     </>
