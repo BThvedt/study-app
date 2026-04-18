@@ -10,7 +10,7 @@ const poppins = Poppins({
   weight: ["300", "400", "500", "600", "700"],
 });
 
-const APP_NAME = "Study App";
+const APP_NAME = "Mind Organizer";
 const APP_DESCRIPTION =
   "Flashcards, notes, and spaced repetition for effective studying";
 

@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { BookOpen, Search, Layers, FileText, CheckSquare, User, BarChart2, LogOut, Settings, WifiOff } from 'lucide-react';
+import { NotebookPen, Search, Layers, FileText, CheckSquare, User, BarChart2, LogOut, Settings, WifiOff } from 'lucide-react';
 import { SearchDialog } from '@/components/search-dialog';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { cn } from '@/lib/utils';
@@ -45,8 +45,9 @@ export function Header({ authenticated, onSignIn, onSignUp, onLogout }: HeaderPr
 
   const logoContent = (
     <>
-      <BookOpen className="h-5 w-5 text-primary" />
-      <span>StudyApp</span>
+      <NotebookPen className="h-5 w-5 text-primary shrink-0" aria-hidden />
+      <span className="hidden sm:inline">Mind Organizer</span>
+      <span className="sm:hidden">MO</span>
     </>
   );
 
@@ -57,12 +58,16 @@ export function Header({ authenticated, onSignIn, onSignUp, onLogout }: HeaderPr
           {authenticated ? (
             <Link
               href="/dashboard"
+              aria-label="Mind Organizer home"
               className="flex items-center gap-2 text-foreground font-semibold text-lg tracking-tight hover:text-foreground/80 transition-colors"
             >
               {logoContent}
             </Link>
           ) : (
-            <div className="flex items-center gap-2 text-foreground font-semibold text-lg tracking-tight">
+            <div
+              className="flex items-center gap-2 text-foreground font-semibold text-lg tracking-tight"
+              aria-label="Mind Organizer"
+            >
               {logoContent}
             </div>
           )}
