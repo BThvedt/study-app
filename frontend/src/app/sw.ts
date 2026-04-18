@@ -20,7 +20,7 @@ declare global {
 
 declare const self: ServiceWorkerGlobalScope;
 
-const mutationQueue = new BackgroundSyncQueue("study-app-mutations", {
+const mutationQueue = new BackgroundSyncQueue("mind-organizer-mutations", {
   maxRetentionTime: 24 * 60,
   forceSyncFallback: true,
 });

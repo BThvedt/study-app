@@ -1,9 +1,9 @@
 ---
-description: Full architecture reference for the Study App — stack, content model, taxonomy, API patterns, and custom module conventions.
+description: Full architecture reference for Mind Organizer — stack, content model, taxonomy, API patterns, and custom module conventions.
 alwaysApply: true
 ---
 
-# Study App Architecture
+# Mind Organizer Architecture
 
 ## Stack
 

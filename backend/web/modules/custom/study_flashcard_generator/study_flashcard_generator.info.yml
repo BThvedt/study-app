@@ -1,7 +1,7 @@
 name: 'Study Flashcard Generator'
 type: module
 description: 'Generates flashcard candidates from study notes via AI (Anthropic Claude) and manual text selection.'
-package: 'Study App'
+package: 'Mind Organizer'
 core_version_requirement: ^10 || ^11
 dependencies:
   - drupal:node

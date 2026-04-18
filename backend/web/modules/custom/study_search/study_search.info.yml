@@ -1,7 +1,7 @@
 name: 'Study Search'
 type: module
 description: 'Exposes a search endpoint over study notes and flashcard decks via Search API.'
-package: 'Study App'
+package: 'Mind Organizer'
 core_version_requirement: ^10 || ^11
 dependencies:
   - drupal:node
