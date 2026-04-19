@@ -20,6 +20,8 @@ interface ProfileData {
   uuid: string;
   name: string;
   mail: string;
+  /** ISO 8601 from Drupal; optional for older clients */
+  created?: string | null;
 }
 
 type Status = { type: 'idle' } | { type: 'loading' } | { type: 'success'; message: string } | { type: 'error'; message: string };

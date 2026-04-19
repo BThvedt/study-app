@@ -13,10 +13,16 @@ export async function GET() {
   }
 
   const data = await res.json();
+  const attrs = (data.data?.attributes ?? {}) as {
+    name?: string;
+    mail?: string;
+    created?: string;
+  };
   return NextResponse.json({
     uuid,
-    name: data.data?.attributes?.name ?? '',
-    mail: data.data?.attributes?.mail ?? '',
+    name: attrs.name ?? '',
+    mail: attrs.mail ?? '',
+    created: attrs.created ?? null,
   });
 }
 

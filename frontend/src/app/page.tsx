@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { AuthModals } from '@/components/auth-modals';
 import { Button } from '@/components/ui/button';
-import { BookOpen, Brain, BarChart3, Zap } from 'lucide-react';
+import { BookOpen, ListTodo, Sparkles, Zap } from 'lucide-react';
 
 type AuthModal = 'signin' | 'signup' | null;
 
@@ -58,18 +58,17 @@ export default function Home() {
         <section className="flex flex-col items-center justify-center text-center gap-6 px-6 pt-40 pb-24">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-xs text-muted-foreground">
             <Zap className="h-3 w-3" />
-            Smarter studying starts here
+            Memory and Focuse start Here.
           </div>
 
           <h1 className="max-w-2xl text-5xl font-bold tracking-tight leading-tight">
-            Learn faster with
-            <span className="text-primary"> adaptive </span>
-            study tools
+            Organize your Mind and{' '}
+            <span className="text-primary">Unlock your Ability.</span>
           </h1>
 
           <p className="max-w-md text-muted-foreground text-lg leading-relaxed">
-            Build lasting knowledge with spaced repetition, progress tracking, and
-            AI-powered quizzes — all in one place.
+            Never lose track or forget important information with simple, basic, yet powerful tools - all in
+            one place, and enhanced with latest tech.
           </p>
 
           {authenticated === null ? null : authenticated ? (
@@ -93,22 +92,22 @@ export default function Home() {
         <section className="mx-auto max-w-5xl px-6 pb-24 grid grid-cols-1 sm:grid-cols-3 gap-6 w-full">
           {[
             {
-              icon: <Brain className="h-6 w-6 text-primary" />,
-              title: 'Spaced repetition',
-              description:
-                'Our algorithm surfaces cards at the exact moment you need to review them.',
-            },
-            {
-              icon: <BarChart3 className="h-6 w-6 text-primary" />,
-              title: 'Progress tracking',
-              description:
-                'Visualise your learning streaks, retention rate, and time invested.',
-            },
-            {
               icon: <BookOpen className="h-6 w-6 text-primary" />,
-              title: 'Rich flashcards',
+              title: 'Rich Flashcards',
               description:
-                'Create cards with markdown, images, and code blocks to study any subject.',
+                'Create rich cards with markdown, and review with a spaced repetition algorithm to study any subject',
+            },
+            {
+              icon: <ListTodo className="h-6 w-6 text-primary" />,
+              title: 'Notes and Todos',
+              description:
+                'Rich organized searchable notes with markdown, and todo lists to help organize and remember',
+            },
+            {
+              icon: <Sparkles className="h-6 w-6 text-primary" />,
+              title: 'AI Integration',
+              description:
+                'AI assisted formatting and flashcard creation, pull in info you might have missed, all now easier than ever!',
             },
           ].map(({ icon, title, description }) => (
             <div

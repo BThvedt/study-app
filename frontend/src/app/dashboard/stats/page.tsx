@@ -28,7 +28,7 @@ function formatTime(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export default function ProgressPage() {
+export default function StudyStatsPage() {
   const router = useRouter();
   const authenticated = useAuth();
   const [sessions, setSessions] = useState<StudySession[]>([]);
@@ -101,8 +101,10 @@ export default function ProgressPage() {
             <span className="sr-only">Back to dashboard</span>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Progress</h1>
-            <p className="mt-1 text-muted-foreground">Your study history and performance. See your retention rate and study history with stats!</p>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Study Stats</h1>
+            <p className="mt-1 text-muted-foreground">
+              Your study history and performance. See your retention rate, study history, and progress!
+            </p>
           </div>
         </div>
 

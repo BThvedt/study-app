@@ -150,9 +150,9 @@ export function Header({ authenticated, onSignIn, onSignUp, onLogout }: HeaderPr
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <Link href="/dashboard/progress" className="flex items-center gap-2 w-full">
+                    <Link href="/dashboard/stats" className="flex items-center gap-2 w-full">
                       <BarChart2 className="h-4 w-4" />
-                      Progress
+                      Study Stats
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
