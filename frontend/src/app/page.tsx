@@ -58,12 +58,12 @@ export default function Home() {
         <section className="flex flex-col items-center justify-center text-center gap-6 px-6 pt-40 pb-24">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-xs text-muted-foreground">
             <Zap className="h-3 w-3" />
-            Memory and Focuse start Here.
+            Memory and Focus start Here.
           </div>
 
-          <h1 className="max-w-2xl text-5xl font-bold tracking-tight leading-tight">
-            Organize your Mind and{' '}
-            <span className="text-primary">Unlock your Ability.</span>
+          <h1 className="max-w-2xl text-5xl font-bold tracking-tight leading-snug">
+            Organize Your Mind and{' '}
+            <span className="text-primary">Unlock Your Ability.</span>
           </h1>
 
           <p className="max-w-md text-muted-foreground text-lg leading-relaxed">
@@ -101,7 +101,7 @@ export default function Home() {
               icon: <ListTodo className="h-6 w-6 text-primary" />,
               title: 'Notes and Todos',
               description:
-                'Rich organized searchable notes with markdown, and todo lists to help organize and remember',
+                'Rich organized searchable notes with markdown. Todo lists to help organize and remember',
             },
             {
               icon: <Sparkles className="h-6 w-6 text-primary" />,
