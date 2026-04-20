@@ -149,6 +149,14 @@ export default function AreasPage() {
     if (!confirmDelete) return;
     setDeleting(true);
     try {
+      // Delete all subjects belonging to this area first
+      const subjects = subjectsByArea[confirmDelete.id] ?? [];
+      await Promise.all(
+        subjects.map((s) =>
+          fetch(`/api/taxonomy/${s.id}?type=subject`, { method: 'DELETE' })
+        )
+      );
+
       const res = await fetch(`/api/taxonomy/${confirmDelete.id}?type=area`, { method: 'DELETE' });
       if (res.ok || res.status === 204) {
         setAreas((prev) => prev.filter((a) => a.id !== confirmDelete.id));
@@ -316,8 +324,8 @@ export default function AreasPage() {
           <DialogHeader>
             <DialogTitle>Delete area?</DialogTitle>
             <DialogDescription>
-              &ldquo;{confirmDelete?.attributes?.name as string}&rdquo; will be permanently deleted.
-              This cannot be undone.
+              &ldquo;{confirmDelete?.attributes?.name as string}&rdquo; and all of its subjects will
+              be permanently deleted. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

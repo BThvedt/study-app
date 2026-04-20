@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, useMarkSignedOut } from '@/hooks/useAuth';
 import { Header } from '@/components/header';
@@ -16,7 +16,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { FolderOpen, ArrowLeft, Plus, Pencil, X, Check, Layers, FileText } from 'lucide-react';
+import { FolderOpen, ArrowLeft, Plus, Pencil, Trash2, X, Check, Layers, FileText } from 'lucide-react';
 import { cn, toSlug } from '@/lib/utils';
 import type { JsonApiResource } from '@/lib/drupal';
 
@@ -36,6 +36,7 @@ export default function AreaDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
   const initialSubjectId = searchParams.get('subject');
+  const router = useRouter();
   const [areaId, setAreaId] = useState<string | null>(null);
   const [area, setArea] = useState<JsonApiResource | null>(null);
   const [subjects, setSubjects] = useState<JsonApiResource[]>([]);
@@ -67,6 +68,17 @@ export default function AreaDetailPage() {
   // Delete subject state
   const [confirmDelete, setConfirmDelete] = useState<JsonApiResource | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Edit area state
+  const [editingArea, setEditingArea] = useState(false);
+  const [editAreaName, setEditAreaName] = useState('');
+  const [editAreaError, setEditAreaError] = useState('');
+  const [editAreaSaving, setEditAreaSaving] = useState(false);
+  const editAreaInputRef = useRef<HTMLInputElement>(null);
+
+  // Delete area state
+  const [confirmDeleteArea, setConfirmDeleteArea] = useState(false);
+  const [deletingArea, setDeletingArea] = useState(false);
 
   const authenticated = useAuth();
   const markSignedOut = useMarkSignedOut();
@@ -110,8 +122,41 @@ export default function AreaDetailPage() {
     load();
   }, [authenticated, slug]);
 
+  useEffect(() => { if (editingArea) editAreaInputRef.current?.focus(); }, [editingArea]);
   useEffect(() => { if (adding) addInputRef.current?.focus(); }, [adding]);
   useEffect(() => { if (editingId) editInputRef.current?.focus(); }, [editingId]);
+
+  async function handleEditArea() {
+    const name = editAreaName.trim();
+    if (!name) { setEditAreaError('Name is required.'); return; }
+    setEditAreaSaving(true);
+    try {
+      const res = await fetch(`/api/taxonomy/${areaId}?type=area`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        setArea((prev) => prev ? { ...prev, attributes: { ...prev.attributes, name } } : prev);
+        setEditingArea(false);
+        setEditAreaError('');
+        router.replace(`/dashboard/areas/${toSlug(name)}`);
+      }
+    } finally { setEditAreaSaving(false); }
+  }
+
+  async function handleDeleteArea() {
+    setDeletingArea(true);
+    try {
+      await Promise.all(
+        subjects.map((s) => fetch(`/api/taxonomy/${s.id}?type=subject`, { method: 'DELETE' }))
+      );
+      const res = await fetch(`/api/taxonomy/${areaId}?type=area`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        router.push('/dashboard/areas');
+      }
+    } finally { setDeletingArea(false); }
+  }
 
   function isDuplicate(name: string, excludeId?: string) {
     return subjects.some(
@@ -220,10 +265,52 @@ export default function AreaDetailPage() {
           <>
             <Card>
               <CardHeader className="border-b border-border pb-4">
-                <CardTitle className="flex items-center gap-2.5 text-xl font-semibold">
-                  <FolderOpen className="h-6 w-6 text-primary shrink-0" />
-                  {area?.attributes?.name as string}
-                </CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  {editingArea ? (
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <FolderOpen className="h-6 w-6 text-primary shrink-0" />
+                        <input
+                          ref={editAreaInputRef}
+                          value={editAreaName}
+                          onChange={(e) => { setEditAreaName(e.target.value); setEditAreaError(''); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleEditArea(); if (e.key === 'Escape') setEditingArea(false); }}
+                          className="flex-1 text-xl font-semibold bg-background border border-border rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-ring"
+                        />
+                        <button onClick={handleEditArea} disabled={editAreaSaving} className="text-primary hover:text-primary/80 transition-colors p-0.5">
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => setEditingArea(false)} className="text-muted-foreground hover:text-foreground transition-colors p-0.5">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {editAreaError && <p className="text-xs text-destructive pl-8">{editAreaError}</p>}
+                    </div>
+                  ) : (
+                    <CardTitle className="flex items-center gap-2.5 text-xl font-semibold">
+                      <FolderOpen className="h-6 w-6 text-primary shrink-0" />
+                      {area?.attributes?.name as string}
+                    </CardTitle>
+                  )}
+                  {!editingArea && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost" size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => { setEditAreaName(area?.attributes?.name as string); setEditingArea(true); setEditAreaError(''); }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setConfirmDeleteArea(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
 
               <CardContent className="pt-3 pb-4">
@@ -394,6 +481,26 @@ export default function AreaDetailPage() {
           </>
         )}
       </main>
+
+      <Dialog open={confirmDeleteArea} onOpenChange={(open) => { if (!open) setConfirmDeleteArea(false); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete area?</DialogTitle>
+            <DialogDescription>
+              &ldquo;{area?.attributes?.name as string}&rdquo; and all of its subjects will be
+              permanently deleted. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteArea(false)} disabled={deletingArea}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteArea} disabled={deletingArea}>
+              {deletingArea ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!confirmDelete} onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}>
         <DialogContent showCloseButton={false}>
